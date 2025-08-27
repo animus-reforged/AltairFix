@@ -5,6 +5,7 @@
 namespace Constants {
     extern const std::string FixName;
     extern const std::string FixLogFile;
+    extern const std::string FixConfigFile;
     extern const std::string FixVersion;
 
     extern std::filesystem::path BasePath;

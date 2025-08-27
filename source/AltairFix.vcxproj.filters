@@ -8,6 +8,9 @@
     <ClCompile Include="Constants.cpp">
       <Filter>Constants</Filter>
     </ClCompile>
+    <ClCompile Include="Config.cpp">
+      <Filter>Config</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Logger.h">
@@ -15,6 +18,9 @@
     </ClInclude>
     <ClInclude Include="Constants.h">
       <Filter>Constants</Filter>
+    </ClInclude>
+    <ClInclude Include="Config.h">
+      <Filter>Config</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -24,5 +30,11 @@
     <Filter Include="Constants">
       <UniqueIdentifier>{e02291d6-02fc-4fd1-8de2-246da5aa78c4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Config">
+      <UniqueIdentifier>{0aba118a-0062-4270-8f2f-2fe1779a856f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="AltairFix.ini" />
   </ItemGroup>
 </Project>
