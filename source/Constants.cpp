@@ -3,7 +3,7 @@
 namespace Constants {
     const std::string FixName = "AltairFix";
     const std::string FixLogFile = FixName + ".log";
-    const std::string FixConfigFile = FixName + ".ini";
+    const std::string FixConfigFile = ".\\" + FixName + ".ini";
     const std::string FixVersion = "1.0.0";
 
     std::filesystem::path BasePath = std::filesystem::current_path();

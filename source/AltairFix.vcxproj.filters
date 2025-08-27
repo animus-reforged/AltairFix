@@ -11,6 +11,9 @@
     <ClCompile Include="Config.cpp">
       <Filter>Config</Filter>
     </ClCompile>
+    <ClCompile Include="WindowedMode.cpp">
+      <Filter>WindowedMode</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Logger.h">
@@ -22,6 +25,9 @@
     <ClInclude Include="Config.h">
       <Filter>Config</Filter>
     </ClInclude>
+    <ClInclude Include="WindowedMode.h">
+      <Filter>WindowedMode</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Logger">
@@ -32,6 +38,9 @@
     </Filter>
     <Filter Include="Config">
       <UniqueIdentifier>{0aba118a-0062-4270-8f2f-2fe1779a856f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="WindowedMode">
+      <UniqueIdentifier>{d2bbda3f-6396-4324-b573-fef7cd9e215c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

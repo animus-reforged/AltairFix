@@ -13,8 +13,8 @@ void LoadConfig()
 
 	// Display settings
 	g_config.windowMode = GetPrivateProfileIntA("Display", "WindowMode", 0, configFile);
-	g_config.windowWidth = GetPrivateProfileIntA("Display", "WindowWidth", 1280, configFile);
-	g_config.windowHeight = GetPrivateProfileIntA("Display", "WindowHeight", 720, configFile);
+	g_config.windowWidth = GetPrivateProfileIntA("Display", "WindowWidth", GetSystemMetrics(SM_CXSCREEN) / 2, configFile);
+	g_config.windowHeight = GetPrivateProfileIntA("Display", "WindowHeight", GetSystemMetrics(SM_CYSCREEN) / 2, configFile);
 	g_config.windowPosX = GetPrivateProfileIntA("Display", "WindowPosX", -1, configFile);
 	g_config.windowPosY = GetPrivateProfileIntA("Display", "WindowPosY", -1, configFile);
 
