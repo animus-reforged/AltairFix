@@ -1,26 +1,126 @@
-#pragma once
+﻿#pragma once
 #include <windows.h>
+#include <d3d9.h>
+#include <d3d10.h>
+#include <dxgi.h>
 
 class WindowedMode
 {
 public:
-	static HWND GetGameWindow();
-	static void Hook();
+    static HWND GetGameWindow();
+    static void Hook();
+    static void Unhook();
+
+    // Engine-specific
+    static void HookD3D9();
+    static void HookD3D10();
+    static void HookFocusFunctions();
+
+    static HRESULT STDMETHODCALLTYPE HookedCreateSwapChain(
+        IDXGIFactory* self,
+        IUnknown* pDevice,
+        DXGI_SWAP_CHAIN_DESC* pDesc,
+        IDXGISwapChain** ppSwapChain);
+
+    static HRESULT(STDMETHODCALLTYPE* s_TrueCreateSwapChain)(
+        IDXGIFactory* self,
+        IUnknown* pDevice,
+        DXGI_SWAP_CHAIN_DESC* pDesc,
+        IDXGISwapChain** ppSwapChain);
 
 private:
-	static HWND s_gameWindow;
+    static HWND  s_gameWindow;
+    static bool  s_blockFocusLoss;
 
-	// Function pointers
-	using tCreateWindowExA = HWND(WINAPI*)(DWORD, LPCSTR, LPCSTR, DWORD,
-		int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-	using tClipCursor = BOOL(WINAPI*)(const RECT*);
+    // =========================
+    // Direct3D9 Hooks
+    // =========================
+    static IDirect3D9* s_pD3D9;
+    static IDirect3DDevice9* s_pDevice;
+    static void** s_pD3D9VTable;
+    static void** s_pDeviceVTable;
 
-	static tCreateWindowExA s_TrueCreateWindowExA;
-	static tClipCursor s_TrueClipCursor;
+    static HRESULT(WINAPI* s_TrueCreateDevice)(
+        IDirect3D9*, UINT, D3DDEVTYPE, HWND, DWORD,
+        D3DPRESENT_PARAMETERS*, IDirect3DDevice9**);
+    static HRESULT(WINAPI* s_TrueReset)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
+    static HRESULT(WINAPI* s_TruePresent)(
+        IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA*);
 
-	// Hooked implementations
-	static BOOL WINAPI HookedClipCursor(const RECT* lpRect);
-	static HWND WINAPI HookedCreateWindowExA(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
-		DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-		HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
+    static HRESULT WINAPI HookedCreateDevice(
+        IDirect3D9* self, UINT adapter, D3DDEVTYPE devType,
+        HWND hFocusWnd, DWORD behaviorFlags,
+        D3DPRESENT_PARAMETERS* params, IDirect3DDevice9** ppDevice);
+
+    static HRESULT WINAPI HookedReset(IDirect3DDevice9* self, D3DPRESENT_PARAMETERS* params);
+    static HRESULT WINAPI HookedPresent(IDirect3DDevice9* self,
+        const RECT* pSourceRect, const RECT* pDestRect,
+        HWND hDestWindowOverride, const RGNDATA* pDirtyRegion);
+
+    // =========================
+    // Direct3D10 Hooks
+    // =========================
+    static ID3D10Device* s_pDevice10;
+    static IDXGISwapChain* s_pSwapChain;
+    static void** s_pSwapChainVTable;
+
+    static HRESULT(WINAPI* s_TrueD3D10CreateDevice)(
+        IDXGIAdapter* pAdapter,
+        D3D10_DRIVER_TYPE DriverType,
+        HMODULE Software,
+        UINT Flags,
+        UINT SDKVersion,
+        ID3D10Device** ppDevice);
+
+    static HRESULT WINAPI HookedD3D10CreateDevice(
+        IDXGIAdapter* pAdapter,
+        D3D10_DRIVER_TYPE DriverType,
+        HMODULE Software,
+        UINT Flags,
+        UINT SDKVersion,
+        ID3D10Device** ppDevice);
+
+    // 🔥 NEW: Hook D3D10CreateDeviceAndSwapChain
+    static HRESULT(WINAPI* s_TrueD3D10CreateDeviceAndSwapChain)(
+        IDXGIAdapter*,
+        D3D10_DRIVER_TYPE,
+        HMODULE,
+        UINT,
+        UINT,
+        DXGI_SWAP_CHAIN_DESC*,
+        IDXGISwapChain**,
+        ID3D10Device**);
+
+    // Also Present hook
+    static HRESULT(STDMETHODCALLTYPE* s_TruePresent10)(
+        IDXGISwapChain* self, UINT SyncInterval, UINT Flags);
+
+    // =========================
+    // Focus handling hooks
+    // =========================
+    static BOOL(WINAPI* s_TrueGetMessage)(LPMSG, HWND, UINT, UINT);
+    static BOOL(WINAPI* s_TruePeekMessage)(LPMSG, HWND, UINT, UINT, UINT);
+    static HWND(WINAPI* s_TrueGetForegroundWindow)();
+    static HWND(WINAPI* s_TrueGetFocus)();
+    static SHORT(WINAPI* s_TrueGetAsyncKeyState)(int);
+
+    static BOOL WINAPI  HookedGetMessage(LPMSG lpMsg, HWND hWnd, UINT wMin, UINT wMax);
+    static BOOL WINAPI  HookedPeekMessage(LPMSG lpMsg, HWND hWnd, UINT wMin, UINT wMax, UINT removeMsg);
+    static HWND WINAPI  HookedGetForegroundWindow();
+    static HWND WINAPI  HookedGetFocus();
+    static SHORT WINAPI HookedGetAsyncKeyState(int vKey);
+
+    // =========================
+    // WndProc hook
+    // =========================
+    static WNDPROC s_OriginalWndProc;
+    static LRESULT CALLBACK WindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+    // =========================
+    // Helpers
+    // =========================
+    static void AdjustPresentParameters(D3DPRESENT_PARAMETERS* params);
+    static void AdjustSwapChainDesc(DXGI_SWAP_CHAIN_DESC* desc);
+    static void SetupWindow(HWND hWnd);
+    static void FilterMessage(LPMSG lpMsg);
 };
