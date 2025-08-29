@@ -20,7 +20,10 @@ void LoadConfig()
 
 	// Misc
 	g_config.enableLogging = GetPrivateProfileIntA("Misc", "EnableLogging", 1, configFile) != 0;
-
+	g_config.logLevel = GetPrivateProfileIntA("Misc", "LogLevel", 2, configFile);
+	if (g_config.logLevel < 0 || g_config.logLevel > 6) {
+		g_config.logLevel = 2; // default info
+	}
 	if (g_config.windowMode < 0 || g_config.windowMode > 2)
 	{
 		g_config.windowMode = 0;

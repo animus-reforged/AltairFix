@@ -9,6 +9,7 @@ struct Config {
 	int windowPosX = -1;    // -1=center
 	int windowPosY = -1;    // -1=center
 	bool enableLogging = true;
+	int logLevel = 2;
 };
 
 extern Config g_config;
