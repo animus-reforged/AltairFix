@@ -15,6 +15,7 @@ public:
     // Shutdown logger (call at DLL unload)
     static void Shutdown();
 
+    static void SetLevel(int level);
 private:
     static std::shared_ptr<spdlog::logger> s_Logger;
 };

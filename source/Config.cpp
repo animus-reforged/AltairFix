@@ -24,6 +24,7 @@ void LoadConfig()
 	if (g_config.logLevel < 0 || g_config.logLevel > 6) {
 		g_config.logLevel = 2; // default info
 	}
+	Logger::SetLevel(g_config.logLevel);
 	if (g_config.windowMode < 0 || g_config.windowMode > 2)
 	{
 		g_config.windowMode = 0;

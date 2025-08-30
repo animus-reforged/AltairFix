@@ -34,35 +34,7 @@ void Logger::Init()
 
 		spdlog::set_default_logger(s_Logger);
 		spdlog::flush_on(spdlog::level::debug);
-		spdlog::level::level_enum lvl;
-		switch (g_config.logLevel) {
-		case 0:
-			lvl = spdlog::level::trace;
-			break;
-		case 1:
-			lvl = spdlog::level::debug;
-			break;
-		case 2:
-			lvl = spdlog::level::info;
-			break;
-		case 3:
-			lvl = spdlog::level::warn;
-			break;
-		case 4:
-			lvl = spdlog::level::err;
-			break;
-		case 5:
-			lvl = spdlog::level::critical;
-			break;
-		case 6:
-			lvl = spdlog::level::off;
-			break;
-		default:
-			lvl = spdlog::level::info;
-			break;
-		}
-
-		spdlog::set_level(lvl);
+		SetLevel(g_config.logLevel);
 
 		s_Logger->info("----------");
 		s_Logger->info("{} v{} loaded.", Constants::FixName, Constants::FixVersion);
@@ -81,6 +53,26 @@ void Logger::Init()
 std::shared_ptr<spdlog::logger>& Logger::Get()
 {
 	return s_Logger;
+}
+
+void Logger::SetLevel(int level)
+{
+	if (!s_Logger) return;
+
+	spdlog::level::level_enum lvl;
+	switch (level) {
+	case 0: lvl = spdlog::level::trace; break;
+	case 1: lvl = spdlog::level::debug; break;
+	case 2: lvl = spdlog::level::info; break;
+	case 3: lvl = spdlog::level::warn; break;
+	case 4: lvl = spdlog::level::err; break;
+	case 5: lvl = spdlog::level::critical; break;
+	case 6: lvl = spdlog::level::off; break;
+	default: lvl = spdlog::level::info; break;
+	}
+
+	spdlog::set_level(lvl);
+	s_Logger->info("Log level changed to {}", level);
 }
 
 void Logger::Shutdown()
