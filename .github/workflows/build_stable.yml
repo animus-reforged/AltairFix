@@ -1,0 +1,47 @@
+name: Build stable version and draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag for the release (e.g., 1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build DLL
+        run: msbuild AltairFix.sln /p:Configuration=Release /p:Platform=x86
+
+      - name: Zip Artifacts
+        run: |
+          $tag = "${{ github.event.inputs.tag }}"
+          Compress-Archive -Path "output/Release/*.asi","output/Release/*.ini" -DestinationPath "output/Release/AltairFix.zip"
+
+      - name: Generate Release Notes Body
+        id: notes
+        shell: pwsh
+        run: .\.github\workflows\changelog_generator.ps1 -Tag "${{ github.event.inputs.tag }}" -Repository "${{ github.repository }}"
+
+      - name: Create Draft Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.tag }}
+          draft: true
+          artifacts: output/Release/AltairFix.zip
+          replacesArtifacts: true
+          body: ${{ steps.notes.outputs.body }}
