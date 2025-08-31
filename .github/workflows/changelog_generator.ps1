@@ -51,7 +51,13 @@ if ($previousTag) {
 
 # Build the body text
 $body = "## Changes`n"
-$body += (git log --pretty=format:"- %s ([`%h`](https://github.com/$Repository/commit/%H))" $range) -join "`n"
+
+if ($range) {
+    $body += (git log --pretty=format:"- %s ([`%h`](https://github.com/$Repository/commit/%H))" $range) -join "`n"
+} else {
+    # No range, so get ALL commits
+    $body += (git log --pretty=format:"- %s ([`%h`](https://github.com/$Repository/commit/%H))") -join "`n"
+}
 
 if ($env:GITHUB_OUTPUT) {
     # Running inside GitHub Actions: export as output
