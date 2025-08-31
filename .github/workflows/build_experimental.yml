@@ -1,0 +1,29 @@
+name: Build and upload artifact on push
+
+on:
+  push:
+    branches:
+      - "main"   # run on all branches, or set to "main" if you only want main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build DLL
+        run: msbuild AltairFix.sln /p:Configuration=Debug /p:Platform=x86
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AltairFix
+          path: output/Debug
+          if-no-files-found: error
