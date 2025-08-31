@@ -32,9 +32,7 @@ private:
     static HWND  s_gameWindow;
     static bool  s_blockFocusLoss;
 
-    // =========================
     // Direct3D9 Hooks
-    // =========================
     static IDirect3D9* s_pD3D9;
     static IDirect3DDevice9* s_pDevice;
     static void** s_pD3D9VTable;
@@ -57,9 +55,7 @@ private:
         const RECT* pSourceRect, const RECT* pDestRect,
         HWND hDestWindowOverride, const RGNDATA* pDirtyRegion);
 
-    // =========================
     // Direct3D10 Hooks
-    // =========================
     static ID3D10Device* s_pDevice10;
     static IDXGISwapChain* s_pSwapChain;
     static void** s_pSwapChainVTable;
@@ -80,7 +76,6 @@ private:
         UINT SDKVersion,
         ID3D10Device** ppDevice);
 
-    // 🔥 NEW: Hook D3D10CreateDeviceAndSwapChain
     static HRESULT(WINAPI* s_TrueD3D10CreateDeviceAndSwapChain)(
         IDXGIAdapter*,
         D3D10_DRIVER_TYPE,
@@ -95,9 +90,7 @@ private:
     static HRESULT(STDMETHODCALLTYPE* s_TruePresent10)(
         IDXGISwapChain* self, UINT SyncInterval, UINT Flags);
 
-    // =========================
     // Focus handling hooks
-    // =========================
     static BOOL(WINAPI* s_TrueGetMessage)(LPMSG, HWND, UINT, UINT);
     static BOOL(WINAPI* s_TruePeekMessage)(LPMSG, HWND, UINT, UINT, UINT);
     static HWND(WINAPI* s_TrueGetForegroundWindow)();
@@ -110,15 +103,11 @@ private:
     static HWND WINAPI  HookedGetFocus();
     static SHORT WINAPI HookedGetAsyncKeyState(int vKey);
 
-    // =========================
     // WndProc hook
-    // =========================
     static WNDPROC s_OriginalWndProc;
     static LRESULT CALLBACK WindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-    // =========================
-    // Helpers
-    // =========================
+    // Helper functions
     static void AdjustPresentParameters(D3DPRESENT_PARAMETERS* params);
     static void AdjustSwapChainDesc(DXGI_SWAP_CHAIN_DESC* desc);
     static void SetupWindow(HWND hWnd);
