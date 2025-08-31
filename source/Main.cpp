@@ -38,7 +38,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 	{
 		DisableThreadLibraryCalls(hModule);
 		Logger::Init();
-		Logger::Get()->info("AltairFix v1.0.0 loaded");
 
 		LoadConfig();
 		Logger::Get()->info("Config: WindowMode={}, Size={}x{}, PosX={}, PosY={}",
