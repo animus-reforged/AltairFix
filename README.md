@@ -12,8 +12,8 @@ AltairFix brings quality‑of‑life improvements to the PC release of **Assassi
 - ✅ Borderless Mode  
 
 ### DirectX 10  
-- ✅ Windowed Mode  
-- ⬜ Borderless Mode *(Currently bugged)*     
+- ⬜ Windowed Mode *(Currently bugged)* 
+- ✅ Borderless Mode    
 
 ## Credits
 - [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader) for mod loading
