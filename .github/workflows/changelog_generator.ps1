@@ -1,15 +1,52 @@
-param (
+param(
     [string]$Tag,
     [string]$Repository
 )
 
-# Find previous tag if available
-$prev_tag = git describe --tags --abbrev=0 (git rev-list --tags --skip=1 --max-count=1) 2>$null
+Write-Host "Current tag: $Tag"
 
-if ($prev_tag) {
-    $range = "$prev_tag..HEAD"
+# Ensure we have all tags
+git fetch --tags --force
+
+# Get all tags sorted by version
+$allTags = @(git tag --sort=-version:refname)
+Write-Host "Available tags: $($allTags -join ', ')"
+
+# Find previous tag
+$previousTag = $null
+
+# Check if current tag exists in the list
+$currentIndex = $allTags.IndexOf($Tag)
+
+if ($currentIndex -ge 0) {
+    # Current tag exists, get the next one in the sorted list
+    if (($currentIndex + 1) -lt $allTags.Count) {
+        $previousTag = $allTags[$currentIndex + 1]
+    }
 } else {
-    $range = "HEAD"
+    # Current tag doesn't exist yet (typical for new releases)
+    # Get the most recent existing tag
+    if ($allTags.Count -gt 0) {
+        $previousTag = $allTags[0]
+    }
+}
+
+Write-Host "Previous tag found: $previousTag"
+
+# Set the range for git log
+if ($previousTag) {
+    # Check if the current tag exists, if not use HEAD
+    $tagExists = git tag -l $Tag
+    if ($tagExists) {
+        Write-Host "Getting commits between $previousTag and $Tag"
+        $range = "$previousTag..$Tag"
+    } else {
+        Write-Host "Getting commits between $previousTag and HEAD (tag $Tag doesn't exist yet)"
+        $range = "$previousTag..HEAD"
+    }
+} else {
+    Write-Host "No previous tag found, getting all commits"
+    $range = ""
 }
 
 # Build the body text
