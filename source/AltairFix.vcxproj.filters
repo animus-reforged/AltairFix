@@ -17,6 +17,9 @@
     <ClCompile Include="CpuLimiter.cpp">
       <Filter>Fixes\CpuLimiter</Filter>
     </ClCompile>
+    <ClCompile Include="Engine.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Logger.h">
@@ -33,6 +36,9 @@
     </ClInclude>
     <ClInclude Include="CpuLimiter.h">
       <Filter>Fixes\CpuLimiter</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine.h">
+      <Filter>Engine</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -53,6 +59,9 @@
     </Filter>
     <Filter Include="Fixes\CpuLimiter">
       <UniqueIdentifier>{4aad8f9b-64f1-4f1e-861e-35c5f801c4cd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Engine">
+      <UniqueIdentifier>{225b49ee-a067-4228-8dc5-8c445c0de62f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

@@ -1,35 +1,10 @@
-﻿#include "Logger.h"
+﻿#include "MinHook.h"
+#include "Logger.h"
 #include "Config.h"
 #include "CpuLimiter.h"
 #include "WindowedMode.h"
-#include "MinHook.h"
+#include "Engine.h"
 
-#define MEMCMP32(addr, val) (*(DWORD*)(addr) == (DWORD)(val))
-
-enum EngineType
-{
-	ENGINE_UNKNOWN,
-	ENGINE_DX9,
-	ENGINE_DX10
-};
-
-static EngineType DetectEngine()
-{
-	Logger::Get()->info("Detecting engine...");
-	__try {
-		if (MEMCMP32(0x00401375 + 1, 0x42d6))
-		{
-			return ENGINE_DX9;
-		}
-		else if (MEMCMP32(0x004013DE + 1, 0x428d)) {
-			return ENGINE_DX10;
-		}
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
-		Logger::Get()->error("Exception while checking engine signatures");
-	}
-	return ENGINE_UNKNOWN;
-}
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 {
