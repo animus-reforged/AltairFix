@@ -17,6 +17,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 		Logger::Init();
 
 		LoadConfig();
+		Logger::Get()->info("----------");
+		Logger::Get()->info("{} v{} loaded.", Constants::FixName, g_config.version);
+		Logger::Get()->info("Log file: {}", Constants::FullLogFilePath.string());
+		Logger::Get()->info("----------");
 		Logger::Get()->info("Config: WindowMode={}, Size={}x{}, PosX={}, PosY={}",
 			g_config.windowMode, g_config.windowWidth, g_config.windowHeight, g_config.windowPosX, g_config.windowPosY);
 		if (MH_Initialize() != MH_OK) {

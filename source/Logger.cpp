@@ -35,11 +35,6 @@ void Logger::Init()
 		spdlog::set_default_logger(s_Logger);
 		spdlog::flush_on(spdlog::level::debug);
 		SetLevel(g_config.logLevel);
-
-		s_Logger->info("----------");
-		s_Logger->info("{} v{} loaded.", Constants::FixName, Constants::FixVersion);
-		s_Logger->info("Log file: {}", Constants::FullLogFilePath.string());
-		s_Logger->info("----------");
 	}
 	catch (const spdlog::spdlog_ex& ex)
 	{

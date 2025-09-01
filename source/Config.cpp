@@ -11,6 +11,11 @@ void LoadConfig()
 	const char* configFile = Constants::FixConfigFile.c_str();
 	Logger::Get()->info("Loading configuration file {}", Constants::FixConfigFile);
 
+	// Metadata
+	char buf[64] = { 0 };
+	GetPrivateProfileStringA("Metadata", "Version", "1.0.0", buf, sizeof(buf), configFile);
+	g_config.version = std::string(buf);
+
 	// Display settings
 	g_config.windowMode = GetPrivateProfileIntA("Display", "WindowMode", 0, configFile);
 	g_config.windowWidth = GetPrivateProfileIntA("Display", "WindowWidth", GetSystemMetrics(SM_CXSCREEN) / 2, configFile);

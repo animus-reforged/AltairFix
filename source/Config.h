@@ -3,6 +3,7 @@
 
 // Configuration for display + misc options
 struct Config {
+	std::string version = "1.0.0";
 	int windowMode = 0;     // 0=Normal, 1=Borderless, 2=Windowed
 	int windowWidth = 1280;    // If 0 → use default
 	int windowHeight = 720;
