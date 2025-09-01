@@ -4,6 +4,7 @@
 #include "CpuLimiter.h"
 #include "WindowedMode.h"
 #include "Engine.h"
+#include "ServerBlocker.h"
 
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
@@ -18,18 +19,24 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 		LoadConfig();
 		Logger::Get()->info("Config: WindowMode={}, Size={}x{}, PosX={}, PosY={}",
 			g_config.windowMode, g_config.windowWidth, g_config.windowHeight, g_config.windowPosX, g_config.windowPosY);
-
+		if (MH_Initialize() != MH_OK) {
+			Logger::Get()->error("MinHook init failed");
+			break;
+		}
+		EngineType engine = DetectEngine();
 		if (g_config.highCoreCountFix)
 		{
 			CpuLimiter::ProcessAffinityLimiter();
 		}
 
+		if (g_config.serverBlocker)
+		{
+			Logger::Get()->info("Enabling server blocker");
+			ServerBlocker::Init(engine);
+		}
+
 		if (g_config.windowMode != 0)
 		{
-			if (MH_Initialize() != MH_OK) {
-				Logger::Get()->error("MinHook init failed"); break;
-			}
-			EngineType engine = DetectEngine();
 			switch (engine)
 			{
 			case ENGINE_DX9:

@@ -9,6 +9,7 @@ struct Config {
 	int windowPosX = -1;    // -1=center
 	int windowPosY = -1;    // -1=center
 	bool highCoreCountFix = false;
+	bool serverBlocker = true;
 	bool enableLogging = true;
 	int logLevel = 2;
 };

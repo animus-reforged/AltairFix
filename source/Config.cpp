@@ -20,6 +20,7 @@ void LoadConfig()
 
 	// Misc
 	g_config.highCoreCountFix = GetPrivateProfileIntA("Misc", "HighCoreCountFix", 0, configFile) != 0;
+	g_config.serverBlocker = GetPrivateProfileIntA("Misc", "ServerBlocker", 0, configFile) != 0;
 	g_config.enableLogging = GetPrivateProfileIntA("Misc", "EnableLogging", 1, configFile) != 0;
 	g_config.logLevel = GetPrivateProfileIntA("Misc", "LogLevel", 2, configFile);
 	if (g_config.logLevel < 0 || g_config.logLevel > 6) {

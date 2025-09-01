@@ -20,6 +20,9 @@
     <ClCompile Include="Engine.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
+    <ClCompile Include="ServerBlocker.cpp">
+      <Filter>Fixes\ServerBlocker</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Logger.h">
@@ -39,6 +42,9 @@
     </ClInclude>
     <ClInclude Include="Engine.h">
       <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="ServerBlocker.h">
+      <Filter>Fixes\ServerBlocker</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -62,6 +68,9 @@
     </Filter>
     <Filter Include="Engine">
       <UniqueIdentifier>{225b49ee-a067-4228-8dc5-8c445c0de62f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fixes\ServerBlocker">
+      <UniqueIdentifier>{12df4fa3-beef-4c9e-a564-5baf7b6a6fd0}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
