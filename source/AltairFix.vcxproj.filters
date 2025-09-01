@@ -12,7 +12,10 @@
       <Filter>Config</Filter>
     </ClCompile>
     <ClCompile Include="WindowedMode.cpp">
-      <Filter>WindowedMode</Filter>
+      <Filter>Fixes\WindowedMode</Filter>
+    </ClCompile>
+    <ClCompile Include="CpuLimiter.cpp">
+      <Filter>Fixes\CpuLimiter</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -26,7 +29,10 @@
       <Filter>Config</Filter>
     </ClInclude>
     <ClInclude Include="WindowedMode.h">
-      <Filter>WindowedMode</Filter>
+      <Filter>Fixes\WindowedMode</Filter>
+    </ClInclude>
+    <ClInclude Include="CpuLimiter.h">
+      <Filter>Fixes\CpuLimiter</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -39,8 +45,14 @@
     <Filter Include="Config">
       <UniqueIdentifier>{0aba118a-0062-4270-8f2f-2fe1779a856f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="WindowedMode">
+    <Filter Include="Fixes">
+      <UniqueIdentifier>{d47fb90b-1d0e-409b-923a-98dbb6e4aea8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fixes\WindowedMode">
       <UniqueIdentifier>{d2bbda3f-6396-4324-b573-fef7cd9e215c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fixes\CpuLimiter">
+      <UniqueIdentifier>{4aad8f9b-64f1-4f1e-861e-35c5f801c4cd}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

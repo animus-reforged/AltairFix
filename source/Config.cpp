@@ -19,6 +19,7 @@ void LoadConfig()
 	g_config.windowPosY = GetPrivateProfileIntA("Display", "WindowPosY", -1, configFile);
 
 	// Misc
+	g_config.highCoreCountFix = GetPrivateProfileIntA("Misc", "HighCoreCountFix", 0, configFile) != 0;
 	g_config.enableLogging = GetPrivateProfileIntA("Misc", "EnableLogging", 1, configFile) != 0;
 	g_config.logLevel = GetPrivateProfileIntA("Misc", "LogLevel", 2, configFile);
 	if (g_config.logLevel < 0 || g_config.logLevel > 6) {

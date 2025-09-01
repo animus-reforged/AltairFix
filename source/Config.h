@@ -8,6 +8,7 @@ struct Config {
 	int windowHeight = 720;
 	int windowPosX = -1;    // -1=center
 	int windowPosY = -1;    // -1=center
+	bool highCoreCountFix = false;
 	bool enableLogging = true;
 	int logLevel = 2;
 };

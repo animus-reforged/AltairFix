@@ -1,5 +1,6 @@
 ﻿#include "Logger.h"
 #include "Config.h"
+#include "CpuLimiter.h"
 #include "WindowedMode.h"
 #include "MinHook.h"
 
@@ -42,6 +43,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 		LoadConfig();
 		Logger::Get()->info("Config: WindowMode={}, Size={}x{}, PosX={}, PosY={}",
 			g_config.windowMode, g_config.windowWidth, g_config.windowHeight, g_config.windowPosX, g_config.windowPosY);
+
+		if (g_config.highCoreCountFix)
+		{
+			CpuLimiter::ProcessAffinityLimiter();
+		}
 
 		if (g_config.windowMode != 0)
 		{
