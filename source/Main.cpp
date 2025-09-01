@@ -41,21 +41,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 
 		if (g_config.windowMode != 0)
 		{
-			switch (engine)
-			{
-			case ENGINE_DX9:
-				Logger::Get()->info("Engine=DX9");
-				WindowedMode::HookD3D9();
-				break;
-			case ENGINE_DX10:
-				Logger::Get()->info("Engine=DX10");
-				WindowedMode::HookD3D10(); break;
-			default:          Logger::Get()->warn("Engine=Unknown");
-				break;
-			}
-			WindowedMode::HookFocusFunctions();
-			MH_EnableHook(MH_ALL_HOOKS);
-			Logger::Get()->info("Hooks installed for detected engine");
+			WindowedMode::Hook(engine);
 		}
 	}
 	break;
