@@ -7,11 +7,8 @@
 
 ## Features  
 
-- **Borderless Mode**  
-Seamless window integration in both DirectX 9 & DirectX 10.  
-
-- **Windowed Mode (Dx9)**  
-Classic windowed support for DirectX 9.  
+- **Borderless Fullscreen & Windowed Mode**  
+Seamless window integration   
 
 - **High Core Count Fix**  
 Resolves crash issues on CPUs with **32+ cores**.  
