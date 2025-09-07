@@ -23,7 +23,7 @@ void CpuLimiter::ProcessAffinityLimiter()
 		return;
 	}
 
-	int limit = (availableCpus > 32) ? 31 : availableCpus;
+	int limit = (availableCpus >= 32) ? 31 : availableCpus;
 	Logger::Get()->info("System has {} logical processors, limiting to {}", availableCpus, limit);
 
 	DWORD_PTR newMask = 0;
