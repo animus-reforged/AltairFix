@@ -33,10 +33,28 @@ jobs:
       - name: Build DLL
         run: msbuild AltairFix.sln /p:Configuration=Release /p:Platform=x86
 
-      - name: Zip Artifacts
+      - name: Prepare Artifact Layout (scripts/)
+        shell: pwsh
         run: |
-          $tag = "${{ github.event.inputs.tag }}"
-          Compress-Archive -Path "output/Release/*.asi","output/Release/*.ini" -DestinationPath "output/Release/AltairFix.zip"
+          $artifactDir = "output/artifact_package/scripts"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+          Copy-Item "output/Release/*.asi" $artifactDir/
+          Copy-Item "output/Release/*.ini" $artifactDir/
+          Compress-Archive -Path "output/artifact_package/*" `
+                           -DestinationPath "output/Release/AltairFix-artifact.zip" -Force
+
+      - name: Prepare Release Layout (flat)
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "output/Release/*.asi","output/Release/*.ini" `
+                           -DestinationPath "output/Release/AltairFix.zip" -Force
+
+      - name: Upload Artifact (scripts/ layout)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AltairFix-artifact
+          path: output/Release/AltairFix-artifact.zip
+          if-no-files-found: error
 
       - name: Generate Release Notes Body
         id: notes
@@ -51,4 +69,4 @@ jobs:
           draft: true
           artifacts: output/Release/AltairFix.zip
           replacesArtifacts: true
-          body: ${{ steps.notes.outputs.body }}
+          body: ${{ steps.notes.outputs.body }}a
