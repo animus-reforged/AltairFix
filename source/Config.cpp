@@ -23,11 +23,13 @@ void LoadConfig()
 	g_config.windowPosX = GetPrivateProfileIntA("Display", "WindowPosX", -1, configFile);
 	g_config.windowPosY = GetPrivateProfileIntA("Display", "WindowPosY", -1, configFile);
 
-	// Misc
-	g_config.highCoreCountFix = GetPrivateProfileIntA("Misc", "HighCoreCountFix", 0, configFile) != 0;
-	g_config.serverBlocker = GetPrivateProfileIntA("Misc", "ServerBlocker", 0, configFile) != 0;
-	g_config.enableLogging = GetPrivateProfileIntA("Misc", "EnableLogging", 1, configFile) != 0;
-	g_config.logLevel = GetPrivateProfileIntA("Misc", "LogLevel", 2, configFile);
+	// Tweaks
+	g_config.highCoreCountFix = GetPrivateProfileIntA("Tweaks", "HighCoreCountFix", 0, configFile) != 0;
+	g_config.serverBlocker = GetPrivateProfileIntA("Tweaks", "ServerBlocker", 0, configFile) != 0;
+
+	// Debug
+	g_config.enableLogging = GetPrivateProfileIntA("Debug", "EnableLogging", 1, configFile) != 0;
+	g_config.logLevel = GetPrivateProfileIntA("Debug", "LogLevel", 2, configFile);
 	if (g_config.logLevel < 0 || g_config.logLevel > 6) {
 		g_config.logLevel = 2; // default info
 	}
