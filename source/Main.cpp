@@ -51,8 +51,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 		{
 			Logger::Get()->info("AltairFix unloading, removing hooks...");
 			WindowedMode::Unhook();
-			MH_Uninitialize();
 		}
+		MH_Uninitialize();
+#ifdef _DEBUG
+		FreeConsole();
+#endif
 		break;
 	}
 	return TRUE;

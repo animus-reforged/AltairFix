@@ -1,5 +1,6 @@
 ﻿#include "Logger.h"
 #include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -13,24 +14,31 @@ void Logger::Init()
 {
 	if (s_Logger)
 		return; // already initialized
-
+#ifdef _DEBUG
+	AllocConsole();
+	SetConsoleTitleA("AltairFix Debug Console");
+#endif
 	try
 	{
-		// Ensure log directory exists
 		if (!std::filesystem::exists(Constants::BasePath))
 			std::filesystem::create_directories(Constants::BasePath);
 
-		// Truncate existing log file
+		// Truncate file
 		std::ofstream file(Constants::FullLogFilePath, std::ios::trunc);
 		if (file.is_open())
 			file.close();
 
-		// Create rotating logger: max 10 MB, 1 file
-		s_Logger = std::make_shared<spdlog::logger>(
-			Constants::FixName,
-			std::make_shared<spdlog::sinks::rotating_file_sink_st>(
-				Constants::FullLogFilePath.string(), 10 * 1024 * 1024, 1)
-		);
+		// Create sinks: file + console
+		auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_st>(
+			Constants::FullLogFilePath.string(), 10 * 1024 * 1024, 1);
+
+		auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_st>();
+		console_sink->set_pattern("[%H:%M:%S] [%^%l%$] %v"); // nicer console format
+
+		std::vector<spdlog::sink_ptr> sinks{ file_sink, console_sink };
+
+		// Tie sinks together into one logger
+		s_Logger = std::make_shared<spdlog::logger>(Constants::FixName, sinks.begin(), sinks.end());
 
 		spdlog::set_default_logger(s_Logger);
 		spdlog::flush_on(spdlog::level::debug);
