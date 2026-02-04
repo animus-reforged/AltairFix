@@ -1,11 +1,7 @@
 name: Build and upload artifact on push
 
 on:
-  push:
-    branches:
-      - "main" # run on all branches, or set to "main" if you only want main
-    paths-ignore:
-      - "README.md"
+  workflow_dispatch:
       
 jobs:
   build:
