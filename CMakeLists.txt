@@ -11,6 +11,13 @@ message(STATUS "Debug scripts path from .env: ${DEBUG_OUTPUT}")
 # Adding files
 add_library(AltairFix SHARED src/main.cpp)
 
+# Libraries
+target_include_directories(AltairFix
+        PRIVATE
+        ${CMAKE_SOURCE_DIR}/external/spdlog/include # spdlog
+        ${CMAKE_SOURCE_DIR}/external/minhook/include # MinHook
+)
+
 # Output
 set_target_properties(AltairFix PROPERTIES
         PREFIX ""
