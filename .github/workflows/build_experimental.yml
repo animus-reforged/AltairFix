@@ -2,30 +2,44 @@ name: Build and upload artifact on push
 
 on:
   push:
-    branches:
-      - "main" # run on all branches, or set to "main" if you only want main
     paths-ignore:
       - "README.md"
-      
+      - "LICENSE"
+      - ".env.EXAMPLE"
+      - ".idea/**"
+      - ".github/workflows/**"
+      - "cmake-build-debug-mingw-32bit/**"
+      - "cmake-build-release-mingw-32bit/**"
+      - "output/**"
+      - "docs/**"
+      - "scripts/**"
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout repo
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
 
-      - name: Build DLL
-        run: msbuild AltairFix.sln /p:Configuration=Debug /p:Platform=x86
+      - name: Configure project (Win32)
+        run: cmake -S . -B build -A Win32
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Build project (Debug, x86)
+        run: cmake --build build --config Debug
+
+      - name: Upload DLL artifact
+        uses: actions/upload-artifact@v7
         with:
           name: AltairFix
-          path: output/Debug
+          path: |
+            output/*.asi
+            output/*.pdb
           if-no-files-found: error
