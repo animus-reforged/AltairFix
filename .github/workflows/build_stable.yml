@@ -15,46 +15,20 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout repo
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
-          fetch-tags: true
 
-      - name: Configure Git
-        run: |
-          git config --global user.email "78475878+shazzaam7@users.noreply.github.com"
-          git config --global user.name "Shazzaam7"
-          git fetch --tags --force
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Configure project (Win32)
+        run: cmake -S . -B build -A Win32
 
-      - name: Build DLL
-        run: msbuild AltairFix.sln /p:Configuration=Release /p:Platform=x86
-
-      - name: Prepare Artifact Layout (scripts/)
-        shell: pwsh
-        run: |
-          $artifactDir = "output/artifact_package/scripts"
-          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
-          Copy-Item "output/Release/*.asi" $artifactDir/
-          Copy-Item "output/Release/*.ini" $artifactDir/
-          Compress-Archive -Path "output/artifact_package/*" `
-                           -DestinationPath "output/Release/AltairFix-artifact.zip" -Force
-
-      - name: Prepare Release Layout (flat)
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "output/Release/*.asi","output/Release/*.ini" `
-                           -DestinationPath "output/Release/AltairFix.zip" -Force
-
-      - name: Upload Artifact (scripts/ layout)
-        uses: actions/upload-artifact@v4
-        with:
-          name: AltairFix-artifact
-          path: output/Release/AltairFix-artifact.zip
-          if-no-files-found: error
+      - name: Build project (Release, x86)
+        run: cmake --build build --config Release
 
       - name: Generate Release Notes Body
         id: notes
@@ -67,6 +41,7 @@ jobs:
           tag: ${{ github.event.inputs.tag }}
           name: ${{ github.event.inputs.tag }}
           draft: true
-          artifacts: output/Release/AltairFix.zip
+          artifacts: |
+            output/*.asi
           replacesArtifacts: true
-          body: ${{ steps.notes.outputs.body }}a
+          body: ${{ steps.notes.outputs.body }}
