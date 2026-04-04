@@ -24,16 +24,25 @@ jobs:
       - name: Setup CMake
         uses: lukka/get-cmake@latest
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
       - name: Configure project (Win32)
         run: cmake -S . -B build -A Win32
 
       - name: Build project (Release, x86)
         run: cmake --build build --config Release
 
+      - name: Create Release ZIP
+        shell: pwsh
+        run: Compress-Archive -Path "output/*.asi" -DestinationPath "output/AltairFix.zip" -Force
+
       - name: Generate Release Notes Body
         id: notes
         shell: pwsh
-        run: .\.github\workflows\changelog_generator.ps1 -Tag "${{ github.event.inputs.tag }}" -Repository "${{ github.repository }}"
+        run: python scripts/changelog_generator.py --tag "${{ github.event.inputs.tag }}" --repository "${{ github.repository }}" --debug
 
       - name: Create Draft Release
         uses: ncipollo/release-action@v1
@@ -41,7 +50,6 @@ jobs:
           tag: ${{ github.event.inputs.tag }}
           name: ${{ github.event.inputs.tag }}
           draft: true
-          artifacts: |
-            output/*.asi
+          artifacts: output/AltairFix.zip
           replacesArtifacts: true
           body: ${{ steps.notes.outputs.body }}
