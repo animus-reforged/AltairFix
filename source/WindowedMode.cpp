@@ -26,7 +26,6 @@ HRESULT(STDMETHODCALLTYPE* WindowedMode::s_TruePresent10)(IDXGISwapChain*, UINT,
 // D3D9 function pointers
 HRESULT(WINAPI* WindowedMode::s_TrueCreateDevice)(IDirect3D9*, UINT, D3DDEVTYPE, HWND, DWORD, D3DPRESENT_PARAMETERS*, IDirect3DDevice9**) = nullptr;
 HRESULT(WINAPI* WindowedMode::s_TrueReset)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*) = nullptr;
-HRESULT(WINAPI* WindowedMode::s_TruePresent)(IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA*) = nullptr;
 
 // D3D10/DXGI function pointers
 HRESULT(WINAPI* WindowedMode::s_TrueD3D10CreateDevice)(IDXGIAdapter*, D3D10_DRIVER_TYPE, HMODULE, UINT, UINT, ID3D10Device**) = nullptr;
@@ -240,8 +239,7 @@ void WindowedMode::AdjustPresentParameters(D3DPRESENT_PARAMETERS* params)
 		params->FullScreen_RefreshRateInHz = 0;
 		params->BackBufferWidth = GetSystemMetrics(SM_CXSCREEN);
 		params->BackBufferHeight = GetSystemMetrics(SM_CYSCREEN);
-
-		Logger::Get()->info("Adjusted DX9 Present Params → Borderless ({}x{})",
+		Logger::Get()->info("Adjusted DX9 Present Params \u2192 Borderless ({}x{})",
 			params->BackBufferWidth, params->BackBufferHeight);
 	}
 	else if (g_config.windowMode == 2) // Windowed
@@ -254,7 +252,7 @@ void WindowedMode::AdjustPresentParameters(D3DPRESENT_PARAMETERS* params)
 		if (g_config.windowHeight > 0)
 			params->BackBufferHeight = g_config.windowHeight;
 
-		Logger::Get()->info("Adjusted DX9 Present Params → Windowed ({}x{})",
+		Logger::Get()->info("Adjusted DX9 Present Params \u2192 Windowed ({}x{})",
 			params->BackBufferWidth, params->BackBufferHeight);
 	}
 }
@@ -402,14 +400,30 @@ HRESULT WINAPI WindowedMode::HookedCreateDevice(
 	Logger::Get()->info("HookedCreateDevice called (adapter={}, hwnd=0x{:X})",
 		adapter, (uintptr_t)win);
 
-	AdjustPresentParameters(p);
-	SetupWindow(win);
+	// Probe devices from other ASI mods (e.g. SubtitleSynchAC1) are always
+	// Windowed=TRUE with Width=0/Height=0 — they just want the vtable.
+	// The game's fullscreen call is always Windowed=FALSE.
+	// For probes: set an explicit 8x8 size (D3D9 refuses Width=0/Height=0 on a
+	// 0-area window) so the device creates in milliseconds without SetupWindow.
+	bool isProbe = p && p->Windowed && p->BackBufferWidth == 0 && p->BackBufferHeight == 0;
+
+	if (isProbe)
+	{
+		p->BackBufferWidth = 8;
+		p->BackBufferHeight = 8;
+		Logger::Get()->info("HookedCreateDevice: probe device, using 8x8 minimal size");
+	}
+	else
+	{
+		AdjustPresentParameters(p);
+		SetupWindow(win);
+	}
 
 	HRESULT hr = s_TrueCreateDevice(self, adapter, type, win, flags, p, outDev);
 
-	if (SUCCEEDED(hr) && outDev && *outDev)
+	if (!isProbe && SUCCEEDED(hr) && outDev && *outDev)
 	{
-		Logger::Get()->info("DX9 device created successfully, hooking Reset/Present");
+		Logger::Get()->info("DX9 device created successfully, hooking Reset");
 
 		s_pDevice = *outDev;
 		s_pDeviceVTable = *reinterpret_cast<void***>(s_pDevice);
@@ -419,13 +433,6 @@ HRESULT WINAPI WindowedMode::HookedCreateDevice(
 			MH_CreateHook(s_pDeviceVTable[16], &HookedReset, (void**)&s_TrueReset);
 			MH_EnableHook(s_pDeviceVTable[16]);
 			Logger::Get()->debug("DX9 Reset hook installed");
-		}
-
-		if (!s_TruePresent)
-		{
-			MH_CreateHook(s_pDeviceVTable[17], &HookedPresent, (void**)&s_TruePresent);
-			MH_EnableHook(s_pDeviceVTable[17]);
-			Logger::Get()->debug("DX9 Present hook installed");
 		}
 	}
 
@@ -437,13 +444,6 @@ HRESULT WINAPI WindowedMode::HookedReset(IDirect3DDevice9* self, D3DPRESENT_PARA
 	Logger::Get()->debug("HookedReset called");
 	AdjustPresentParameters(params);
 	return s_TrueReset(self, params);
-}
-
-HRESULT WINAPI WindowedMode::HookedPresent(
-	IDirect3DDevice9* self, const RECT* src, const RECT* dst,
-	HWND wnd, const RGNDATA* dirty)
-{
-	return s_TruePresent(self, src, dst, wnd, dirty);
 }
 
 //=============================================================================

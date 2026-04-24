@@ -37,8 +37,6 @@ private:
         IDirect3D9*, UINT, D3DDEVTYPE, HWND, DWORD,
         D3DPRESENT_PARAMETERS*, IDirect3DDevice9**);
     static HRESULT(WINAPI* s_TrueReset)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
-    static HRESULT(WINAPI* s_TruePresent)(
-        IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA*);
 
     // D3D10/DXGI function pointers
     static HRESULT(WINAPI* s_TrueD3D10CreateDevice)(
@@ -64,9 +62,6 @@ private:
         HWND hFocusWnd, DWORD behaviorFlags,
         D3DPRESENT_PARAMETERS* params, IDirect3DDevice9** ppDevice);
     static HRESULT WINAPI HookedReset(IDirect3DDevice9* self, D3DPRESENT_PARAMETERS* params);
-    static HRESULT WINAPI HookedPresent(IDirect3DDevice9* self,
-        const RECT* pSourceRect, const RECT* pDestRect,
-        HWND hDestWindowOverride, const RGNDATA* pDirtyRegion);
 
     // D3D10/DXGI hooks
     static HRESULT WINAPI HookedD3D10CreateDevice(
