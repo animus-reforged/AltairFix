@@ -1,0 +1,41 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 4,
+        "minor": 4,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "mingw32",
+            "displayName": "MinGW 32-bit Debug",
+            "description": "32-bit MinGW-w64 debug build",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/mingw32",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/mingw32.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "mingw32-release",
+            "inherits": "mingw32",
+            "displayName": "MinGW 32-bit Release",
+            "description": "32-bit MinGW-w64 release build",
+            "binaryDir": "${sourceDir}/build/mingw32-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "mingw32",
+            "configurePreset": "mingw32"
+        },
+        {
+            "name": "mingw32-release",
+            "configurePreset": "mingw32-release"
+        }
+    ]
+}

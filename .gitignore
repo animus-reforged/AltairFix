@@ -1,0 +1,73 @@
+# ---- Local game environment ----
+.env
+.ENV
+.env.local
+
+# ---- CMake / build output ----
+CMakeUserPresets.json
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+/output/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+/Testing/
+compile_commands.json
+*.ninja
+.ninja_deps
+.ninja_log
+
+# ---- Compiler / linker artifacts ----
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.pch
+*.ipch
+*.gch
+*.so
+*.so.*
+*.dylib
+*.dSYM/
+
+# ---- Visual Studio ----
+/.vs/
+*.sln
+*.vcxproj
+*.vcxproj.*
+*.user
+*.suo
+
+# ---- JetBrains / CLion ----
+/.idea/
+
+# ---- VS Code ----
+/.vscode/
+
+# ---- Dependencies ----
+/vcpkg_installed/
+/_deps/
+/.cache/
+/.ccache/
+
+# ---- OS junk ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+/.venv/
+
+# ---- Logs ----
+*.log

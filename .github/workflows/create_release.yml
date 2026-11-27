@@ -1,0 +1,127 @@
+name: Create release
+
+on:
+  workflow_call:
+    inputs:
+      is_stable:
+        required: true
+        type: boolean
+      tag:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Validate release branch
+        shell: pwsh
+        run: |
+          $isStable = "${{ inputs.is_stable }}" -eq "true"
+          $allowed = if ($isStable) {
+            @("refs/heads/main")
+          } else {
+            @("refs/heads/main", "refs/heads/dev")
+          }
+
+          if ($allowed -notcontains "${{ github.ref }}") {
+            throw "Release creation is only allowed from: $($allowed -join ', ')"
+          }
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download release package
+        uses: actions/download-artifact@v8
+        with:
+          name: AltairFix-${{ inputs.is_stable && 'stable' || 'nightly' }}-release
+          path: artifact
+
+      - name: Prepare release checksum
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem artifact -Filter "AltairFix.zip" -Recurse | Select-Object -First 1
+          if (-not $zip) {
+            throw "Release package was not found"
+          }
+
+          Copy-Item $zip.FullName "AltairFix.zip" -Force
+          $hash = (Get-FileHash "AltairFix.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  AltairFix.zip" | Out-File "AltairFix.zip.sha256" -Encoding ascii
+          Get-ChildItem "AltairFix.zip*" | Select-Object Name, Length
+
+      - name: Determine release tag
+        id: release
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}"
+          $shaShort = $sha.Substring(0, 7)
+
+          if ("${{ inputs.is_stable }}" -eq "true") {
+            $tag = "${{ inputs.tag }}"
+            if ([string]::IsNullOrWhiteSpace($tag)) {
+              throw "Stable releases require a tag"
+            }
+          } else {
+            $tag = "nightly-$shaShort"
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "sha_short=$shaShort" >> $env:GITHUB_OUTPUT
+          "branch=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          Write-Host "Release tag: $tag"
+
+      - name: Generate release notes
+        shell: pwsh
+        run: |
+          $lastTag = git describe --tags --abbrev=0 2>$null
+          if ($LASTEXITCODE -ne 0) { $lastTag = "" }
+
+          python tools/generate_changelog.py $lastTag --output release_notes.md
+          if ($LASTEXITCODE -ne 0) { throw "Changelog generation failed" }
+          Get-Content release_notes.md
+
+      - name: Create or update release
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.release.outputs.tag }}"
+          $branch = "${{ steps.release.outputs.branch }}"
+          $isStable = "${{ inputs.is_stable }}" -eq "true"
+
+          gh release view $tag 2>$null | Out-Null
+          $exists = $LASTEXITCODE -eq 0
+
+          if ($exists) {
+            gh release upload $tag "AltairFix.zip" "AltairFix.zip.sha256" --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Could not upload release assets" }
+
+            gh release edit $tag --notes-file release_notes.md
+            if ($LASTEXITCODE -ne 0) { throw "Could not update release notes" }
+
+            Write-Host "Updated existing release $tag"
+          } else {
+            $ghArgs = @(
+              "release", "create", $tag,
+              "AltairFix.zip", "AltairFix.zip.sha256",
+              "--title", "AltairFix $tag",
+              "--notes-file", "release_notes.md",
+              "--target", $branch
+            )
+            if ($isStable) { $ghArgs += "--draft" } else { $ghArgs += "--prerelease" }
+
+            gh @ghArgs
+            if ($LASTEXITCODE -ne 0) { throw "Could not create release $tag" }
+            Write-Host "Created release $tag"
+          }

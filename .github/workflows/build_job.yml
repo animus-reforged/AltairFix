@@ -1,0 +1,219 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      is_stable:
+        type: boolean
+        required: true
+    outputs:
+      sha_short:
+        value: ${{ jobs.build_windows.outputs.sha_short }}
+      branch:
+        value: ${{ jobs.build_windows.outputs.branch }}
+
+permissions:
+  contents: read
+
+jobs:
+  build_windows:
+    name: Windows / MinGW 32-bit
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      sha_short: ${{ steps.info.outputs.sha_short }}
+      branch: ${{ steps.info.outputs.branch }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Ensure CMake 4.4+
+        shell: pwsh
+        run: |
+          $required = [version]"4.4.0"
+          $current = $null
+          if (Get-Command cmake -ErrorAction SilentlyContinue) {
+            $versionText = cmake --version | Select-Object -First 1
+            $current = [version](($versionText -split '\s+')[2])
+          }
+
+          if (-not $current -or $current -lt $required) {
+            python -m pip install --disable-pip-version-check "cmake>=4.4"
+            $scripts = Join-Path (Split-Path (Get-Command python).Source -Parent) "Scripts"
+            $scripts | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Ensure Ninja
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
+            python -m pip install --disable-pip-version-check ninja
+            $scripts = Join-Path (Split-Path (Get-Command python).Source -Parent) "Scripts"
+            $scripts | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Cache llvm-mingw
+        id: cache-llvm-mingw
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/llvm-mingw.zip
+          key: llvm-mingw-20261117-ucrt-x86_64
+
+      - name: Download llvm-mingw
+        if: steps.cache-llvm-mingw.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20261117/llvm-mingw-20261117-ucrt-x86_64.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "llvm-mingw.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "4d002e330a0f703625aa5ccbc37e96f8f824413e163bfc7336774aabd2c3a412") {
+            throw "llvm-mingw checksum mismatch: $hash"
+          }
+
+      - name: Install llvm-mingw
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "llvm-mingw.zip"
+          $destination = Join-Path $env:RUNNER_TEMP "llvm-mingw"
+          Remove-Item -Recurse -Force $destination -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $destination -Force
+
+          $root = Get-ChildItem $destination -Directory | Select-Object -First 1
+          if (-not $root) {
+            throw "llvm-mingw archive did not contain an extracted directory"
+          }
+
+          $bin = Join-Path $root.FullName "bin"
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "LLVM_MINGW_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & (Join-Path $bin "i686-w64-mingw32-g++.exe") --version
+
+      - name: Get build info
+        id: info
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}"
+          $shortSha = $sha.Substring(0, 7)
+          $branch = "${{ github.ref_name }}"
+
+          "sha_short=$shortSha" >> $env:GITHUB_OUTPUT
+          "branch=$branch" >> $env:GITHUB_OUTPUT
+
+      - name: Check Python scripts
+        run: |
+          python -m compileall -q tools
+          python tools/setup_clion.py --help
+          python tools/setup_asi_loader.py --help
+          python tools/format.py --help
+          python tools/generate_changelog.py --help
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset mingw32 -DCLANG_FORMAT_EXECUTABLE="$env:LLVM_MINGW_BIN\clang-format.exe" -DCLANG_TIDY_EXECUTABLE="$env:LLVM_MINGW_BIN\clang-tidy.exe"
+
+      - name: Build
+        run: cmake --build --preset mingw32
+
+      - name: Check formatting
+        run: cmake --build --preset mingw32 --target format-check
+
+      - name: Lint
+        run: cmake --build --preset mingw32 --target lint
+
+      - name: Test formatter script
+        shell: pwsh
+        run: python tools/format.py --check --clang-format "$env:LLVM_MINGW_BIN\clang-format.exe"
+
+      - name: Test CLion setup script
+        shell: pwsh
+        run: |
+          @'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tools")
+          import setup_clion
+
+          setup_clion.WORKSPACE = Path("build/ci-workspace.xml").resolve()
+          setup_clion.WORKSPACE.parent.mkdir(parents=True, exist_ok=True)
+          setup_clion.WORKSPACE.write_text(
+              setup_clion.MINIMAL_WORKSPACE, encoding="utf-8"
+          )
+          setup_clion.find_game_exe = lambda: Path(
+              "output/scripts/AltairFix.asi"
+          ).resolve()
+          setup_clion.update_workspace()
+
+          text = setup_clion.WORKSPACE.read_text(encoding="utf-8")
+          assert 'TARGET_NAME="AltairFix"' in text
+          assert "RUN_PATH=" in text
+          print("setup_clion workspace update OK")
+          '@ | python -
+
+      - name: Test ASI loader installer
+        shell: pwsh
+        run: |
+          $gameDir = Join-Path $env:RUNNER_TEMP "asi-loader-test"
+          New-Item -ItemType Directory -Force -Path (Join-Path $gameDir "scripts") | Out-Null
+          Copy-Item "output/scripts/AltairFix.asi" (Join-Path $gameDir "AssassinsCreed_Dx9.exe")
+          Copy-Item "output/scripts/AltairFix.asi" (Join-Path $gameDir "scripts\AltairFix.asi")
+
+          python tools/setup_asi_loader.py --game-dir $gameDir
+
+          if (-not (Test-Path (Join-Path $gameDir "dinput8.dll"))) {
+            throw "Ultimate ASI Loader was not installed"
+          }
+
+      - name: Test changelog generator
+        shell: pwsh
+        run: |
+          $base = git rev-list --max-parents=0 HEAD | Select-Object -First 1
+          python tools/generate_changelog.py $base --output "$env:RUNNER_TEMP\changelog.md"
+          Get-Content "$env:RUNNER_TEMP\changelog.md"
+
+      - name: Prepare artifact packages
+        shell: pwsh
+        run: |
+          $artifactDir = "output/artifact_package"
+          $scriptsDir = Join-Path $artifactDir "scripts"
+          New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
+          Copy-Item "output/scripts/AltairFix.asi" (Join-Path $scriptsDir "AltairFix.asi") -Force
+          Copy-Item "README.md" (Join-Path $artifactDir "README.md") -Force
+          Compress-Archive -Path "$artifactDir/*" -DestinationPath "output/AltairFix-artifact.zip" -Force
+
+          $releaseDir = "output/release_package"
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+          Copy-Item "output/scripts/AltairFix.asi" (Join-Path $releaseDir "AltairFix.asi") -Force
+          Copy-Item "README.md" (Join-Path $releaseDir "README.md") -Force
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath "output/AltairFix.zip" -Force
+
+          Get-ChildItem $artifactDir, $releaseDir -Recurse | Select-Object FullName
+
+      - name: Upload raw ASI
+        uses: actions/upload-artifact@v7
+        with:
+          name: AltairFix-${{ inputs.is_stable && 'stable' || 'nightly' }}
+          path: output/scripts/AltairFix.asi
+          if-no-files-found: error
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: AltairFix-${{ inputs.is_stable && 'stable' || 'nightly' }}-artifact
+          path: output/AltairFix-artifact.zip
+          if-no-files-found: error
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: AltairFix-${{ inputs.is_stable && 'stable' || 'nightly' }}-release
+          path: output/AltairFix.zip
+          if-no-files-found: error

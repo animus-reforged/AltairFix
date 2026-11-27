@@ -1,0 +1,61 @@
+# Reads .env and configures where the built ASI is deployed.
+
+set(ALTAIRFIX_ENV_FILE "")
+foreach(_candidate ".env" ".ENV")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_candidate}")
+        set(ALTAIRFIX_ENV_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${_candidate}")
+        break()
+    endif()
+endforeach()
+
+set(ALTAIRFIX_GAME_EXE "")
+if(ALTAIRFIX_ENV_FILE)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ALTAIRFIX_ENV_FILE}")
+
+    file(STRINGS "${ALTAIRFIX_ENV_FILE}" _env_lines)
+    foreach(_line IN LISTS _env_lines)
+        string(STRIP "${_line}" _line)
+        if(_line STREQUAL "" OR _line MATCHES "^#")
+            continue()
+        endif()
+
+        if(_line MATCHES "^([^=]+)=(.*)$")
+            set(_key "${CMAKE_MATCH_1}")
+            set(_value "${CMAKE_MATCH_2}")
+            string(STRIP "${_key}" _key)
+            string(STRIP "${_value}" _value)
+            string(TOUPPER "${_key}" _key_upper)
+
+            if(_key_upper STREQUAL "GAME_EXE" OR _key_upper STREQUAL "GAME_PATH")
+                string(REGEX REPLACE "^\"(.*)\"$" "\\1" _value "${_value}")
+                string(REGEX REPLACE "^'(.*)'$" "\\1" _value "${_value}")
+                set(ALTAIRFIX_GAME_EXE "${_value}")
+            endif()
+        endif()
+    endforeach()
+endif()
+
+set(ALTAIRFIX_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/output/scripts")
+
+if(ALTAIRFIX_GAME_EXE)
+    file(TO_CMAKE_PATH "${ALTAIRFIX_GAME_EXE}" _game_exe)
+    if(NOT IS_ABSOLUTE "${_game_exe}")
+        get_filename_component(_game_exe "${_game_exe}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+
+    if(EXISTS "${_game_exe}")
+        get_filename_component(ALTAIRFIX_GAME_DIR "${_game_exe}" DIRECTORY)
+        set(ALTAIRFIX_GAME_EXE "${_game_exe}")
+        set(ALTAIRFIX_OUTPUT_DIR "${ALTAIRFIX_GAME_DIR}/scripts")
+        message(STATUS "Game executable: ${ALTAIRFIX_GAME_EXE}")
+        message(STATUS "Mod output directory: ${ALTAIRFIX_OUTPUT_DIR}")
+    else()
+        message(WARNING
+            "GAME_EXE does not exist: ${_game_exe}. Building to ${ALTAIRFIX_OUTPUT_DIR}.")
+        set(ALTAIRFIX_GAME_EXE "")
+    endif()
+else()
+    message(STATUS "GAME_EXE is not set; building to ${ALTAIRFIX_OUTPUT_DIR}")
+endif()
+
+file(MAKE_DIRECTORY "${ALTAIRFIX_OUTPUT_DIR}")

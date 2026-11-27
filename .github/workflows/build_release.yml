@@ -1,0 +1,102 @@
+name: Build release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type"
+        required: false
+        type: choice
+        default: Nightly
+        options:
+          - Nightly
+          - Stable
+          - Both
+      tag:
+        description: "Stable release tag (required for Stable/Both), e.g. v0.1.0"
+        required: false
+        type: string
+        default: ""
+  push:
+    paths:
+      - "source/**"
+      - "cmake/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+  pull_request:
+    paths:
+      - "source/**"
+      - "cmake/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.release_type == 'Stable' || inputs.release_type == 'Both')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate stable tag
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.tag }}" ]; then
+            echo "::error::A tag is required for Stable/Both releases."
+            exit 1
+          fi
+          echo "Stable tag: ${{ inputs.tag }}"
+
+  build_nightly:
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      inputs.release_type == 'Nightly' ||
+      inputs.release_type == 'Both'
+    uses: ./.github/workflows/build_job.yml
+    with:
+      is_stable: false
+
+  build_stable:
+    needs: validate
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.release_type == 'Stable' || inputs.release_type == 'Both') &&
+      needs.validate.result == 'success'
+    uses: ./.github/workflows/build_job.yml
+    with:
+      is_stable: true
+
+  create_nightly_release:
+    needs: build_nightly
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') &&
+      (inputs.release_type == 'Nightly' || inputs.release_type == 'Both') &&
+      needs.build_nightly.result == 'success'
+    uses: ./.github/workflows/create_release.yml
+    with:
+      is_stable: false
+    secrets: inherit
+
+  create_stable_release:
+    needs: [validate, build_stable]
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      (inputs.release_type == 'Stable' || inputs.release_type == 'Both') &&
+      needs.validate.result == 'success' &&
+      needs.build_stable.result == 'success'
+    uses: ./.github/workflows/create_release.yml
+    with:
+      is_stable: true
+      tag: ${{ inputs.tag }}
+    secrets: inherit

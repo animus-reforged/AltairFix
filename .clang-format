@@ -1,0 +1,46 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+# Layout
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 160
+LineEnding: CRLF
+InsertNewlineAtEOF: false
+BreakBeforeBraces: Allman
+InsertBraces: true
+AccessModifierOffset: -4
+NamespaceIndentation: All
+IndentCaseLabels: false
+
+# Function arguments
+AlignAfterOpenBracket: Align
+BinPackArguments: false
+AllowAllArgumentsOnNextLine: false
+
+# Short constructs
+AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+
+# Pointers and references
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+
+# Includes
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<.*\.h>'
+    Priority: 2
+  - Regex: '^<'
+    Priority: 3
+...
