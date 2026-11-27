@@ -1,6 +1,7 @@
 #include "UI/Input.h"
 
 #include "imgui_impl_win32.h"
+#include "Logging/Logging.h"
 #include "spdlog/spdlog.h"
 #include "UI/Overlay.h"
 
@@ -66,9 +67,43 @@ namespace
         }
     }
 
+    /// @brief Emits debug-level lifecycle messages useful for focus debugging.
+    void LogWindowMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+        switch (msg)
+        {
+        case WM_ACTIVATE:
+            spdlog::debug("[input] WM_ACTIVATE hwnd=0x{:X} active={} minimized={}", reinterpret_cast<std::uintptr_t>(hwnd), LOWORD(wParam), HIWORD(wParam));
+            break;
+        case WM_ACTIVATEAPP:
+            spdlog::debug("[input] WM_ACTIVATEAPP hwnd=0x{:X} active={}", reinterpret_cast<std::uintptr_t>(hwnd), wParam != 0);
+            break;
+        case WM_SETFOCUS:
+            spdlog::debug("[input] WM_SETFOCUS hwnd=0x{:X}", reinterpret_cast<std::uintptr_t>(hwnd));
+            break;
+        case WM_KILLFOCUS:
+            spdlog::debug("[input] WM_KILLFOCUS hwnd=0x{:X}", reinterpret_cast<std::uintptr_t>(hwnd));
+            break;
+        case WM_SIZE:
+            spdlog::debug("[input] WM_SIZE hwnd=0x{:X} width={} height={}", reinterpret_cast<std::uintptr_t>(hwnd), LOWORD(lParam), HIWORD(lParam));
+            break;
+        case WM_DISPLAYCHANGE:
+            spdlog::debug("[input] WM_DISPLAYCHANGE hwnd=0x{:X} bpp={} width={} height={}",
+                          reinterpret_cast<std::uintptr_t>(hwnd),
+                          wParam,
+                          LOWORD(lParam),
+                          HIWORD(lParam));
+            break;
+        default:
+            break;
+        }
+    }
+
     /// @brief Window procedure that handles the overlay toggle and ImGui input.
     LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+        LogWindowMessage(hwnd, msg, wParam, lParam);
+
         if ((msg == WM_KEYDOWN || msg == WM_KEYUP) && wParam == VK_INSERT)
         {
             // Bit 30 is set on auto-repeat key-down messages. Toggle once per
@@ -114,14 +149,15 @@ namespace AltairFix::UI::Input
             return;
         }
 
-        const auto previous = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(hwnd, GWLP_WNDPROC)); // NOLINT(performance-no-int-to-ptr)
+        const bool unicode = IsWindowUnicode(hwnd) != FALSE;
+        const LONG_PTR previousRaw = unicode ? GetWindowLongPtrW(hwnd, GWLP_WNDPROC) : GetWindowLongPtrA(hwnd, GWLP_WNDPROC);
+        const auto previous = reinterpret_cast<WNDPROC>(previousRaw); // NOLINT(performance-no-int-to-ptr)
         if (previous == nullptr)
         {
-            spdlog::warn("Failed to subclass the game window: it has no previous window procedure.");
+            spdlog::warn("[input] subclass failed hwnd=0x{:X} reason=no-previous-wndproc", reinterpret_cast<std::uintptr_t>(hwnd));
             return;
         }
 
-        const bool unicode = IsWindowUnicode(hwnd) != FALSE;
         const auto callWindowProc = unicode ? &CallWindowProcW : &CallWindowProcA;
 
         // Publish the state WndProc needs before the window can dispatch a
@@ -130,22 +166,39 @@ namespace AltairFix::UI::Input
         g_callWindowProc.store(callWindowProc, std::memory_order_release);
 
         SetLastError(0);
-        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WndProc));
+        if (unicode)
+        {
+            SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WndProc));
+        }
+        else
+        {
+            SetWindowLongPtrA(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WndProc));
+        }
 
         // SetWindowLongPtr returns the previous procedure, which can legitimately
         // be zero. Verify the installation directly instead of interpreting the
         // return value.
-        const auto installed = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(hwnd, GWLP_WNDPROC)); // NOLINT(performance-no-int-to-ptr)
+        const LONG_PTR installedRaw = unicode ? GetWindowLongPtrW(hwnd, GWLP_WNDPROC) : GetWindowLongPtrA(hwnd, GWLP_WNDPROC);
+        const auto installed = reinterpret_cast<WNDPROC>(installedRaw); // NOLINT(performance-no-int-to-ptr)
         if (installed != &WndProc)
         {
             const DWORD error = GetLastError();
             g_originalWndProc.store(nullptr, std::memory_order_release);
             g_callWindowProc.store(nullptr, std::memory_order_release);
-            spdlog::warn("Failed to subclass the game window (error {}).", error);
+            spdlog::warn("[input] subclass failed hwnd=0x{:X} win32=0x{:08X} ({})",
+                         reinterpret_cast<std::uintptr_t>(hwnd),
+                         error,
+                         AltairFix::Logging::Win32ErrorMessage(error));
             return;
         }
 
         g_installed = true;
-        spdlog::info("Game window subclass installed for ImGui input ({} window).", unicode ? "Unicode" : "ANSI");
+        spdlog::info("[input] subclass installed hwnd=0x{:X} unicode={} original_wndproc=0x{:X} setter={} chain={} t=+{}ms",
+                     reinterpret_cast<std::uintptr_t>(hwnd),
+                     unicode,
+                     reinterpret_cast<std::uintptr_t>(previous),
+                     unicode ? "SetWindowLongPtrW" : "SetWindowLongPtrA",
+                     unicode ? "CallWindowProcW" : "CallWindowProcA",
+                     AltairFix::Logging::ElapsedMilliseconds());
     }
 } // namespace AltairFix::UI::Input

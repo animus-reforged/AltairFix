@@ -4,6 +4,7 @@
 #include "imgui_impl_dx9.h"
 #include "imgui_impl_win32.h"
 #include "imgui_internal.h"
+#include "Logging/Logging.h"
 #include "spdlog/spdlog.h"
 #include "UI/Input.h"
 #include "UI/Ui.h"
@@ -45,6 +46,18 @@ namespace
     /// Whether the welcome notification timer has started.
     bool g_notificationStarted = false;
 
+    /// Whether the notification end record has been written.
+    bool g_notificationFinished = false;
+
+    /// Whether the one-time window-state wait record has been written.
+    bool g_notificationWaitLogged = false;
+
+    /// Whether the one-time display-gap pause record has been written.
+    bool g_notificationGapLogged = false;
+
+    /// Whether the notification has been submitted to ImGui at least once.
+    bool g_notificationDrawn = false;
+
     /// Total visible time for the welcome notification.
     constexpr float kNotificationDurationSeconds = 5.0F;
 
@@ -52,6 +65,9 @@ namespace
     /// loading paths do not call the display hook, so a multi-second gap must
     /// not consume the notification before it can be drawn.
     constexpr std::int64_t kNotificationMaxStepMs = 100;
+
+    /// Gaps longer than this are unexpected enough to be worth a debug record.
+    constexpr std::int64_t kNotificationStallLogMs = 1000;
 
     /// Fade-in time for the welcome notification.
     constexpr float kNotificationFadeInSeconds = 0.25F;
@@ -78,7 +94,7 @@ namespace
     /// @return Alpha in [0, 1], or 0 before it starts or after it expires.
     float WelcomeNotificationAlpha()
     {
-        if (!g_initialized)
+        if (!g_initialized || g_notificationFinished)
         {
             return 0.0F;
         }
@@ -96,13 +112,24 @@ namespace
 
             if (!windowVisible || windowIconic)
             {
+                if (!g_notificationWaitLogged)
+                {
+                    g_notificationWaitLogged = true;
+                    spdlog::debug("[overlay] notification waiting reason=window-state hwnd=0x{:X} visible={} iconic={}",
+                                  reinterpret_cast<std::uintptr_t>(g_hwnd),
+                                  windowVisible,
+                                  windowIconic);
+                }
                 return 0.0F;
             }
 
             g_notificationStarted = true;
             g_notificationElapsedMs = 0;
             g_notificationLastTickMs = now;
-            spdlog::info("Startup notification shown.");
+            spdlog::info("[overlay] notification start duration={}s hwnd=0x{:X} t=+{}ms",
+                         kNotificationDurationSeconds,
+                         reinterpret_cast<std::uintptr_t>(g_hwnd),
+                         AltairFix::Logging::ElapsedMilliseconds());
         }
         else
         {
@@ -116,6 +143,12 @@ namespace
             const std::int64_t deltaMs = now - g_notificationLastTickMs;
             g_notificationLastTickMs = now;
 
+            if (deltaMs > kNotificationStallLogMs && !g_notificationGapLogged)
+            {
+                g_notificationGapLogged = true;
+                spdlog::debug("[overlay] notification paused gap={}ms reason=no-recent-display-frame", deltaMs);
+            }
+
             if (deltaMs > 0)
             {
                 g_notificationElapsedMs += std::min(deltaMs, kNotificationMaxStepMs);
@@ -125,6 +158,8 @@ namespace
         const float seconds = static_cast<float>(g_notificationElapsedMs) / 1000.0F;
         if (seconds >= kNotificationDurationSeconds)
         {
+            g_notificationFinished = true;
+            spdlog::info("[overlay] notification end visible_ms={} t=+{}ms", g_notificationElapsedMs, AltairFix::Logging::ElapsedMilliseconds());
             return 0.0F;
         }
 
@@ -157,10 +192,17 @@ namespace
         ImGui::ClearActiveID();
 
         POINT cursor{};
-        if (g_hwnd != nullptr && GetCursorPos(&cursor) != FALSE && ScreenToClient(g_hwnd, &cursor) != FALSE)
+        const bool cursorValid = g_hwnd != nullptr && GetCursorPos(&cursor) != FALSE && ScreenToClient(g_hwnd, &cursor) != FALSE;
+        if (cursorValid)
         {
             io.AddMousePosEvent(static_cast<float>(cursor.x), static_cast<float>(cursor.y));
         }
+
+        spdlog::debug("[overlay] input state reset hwnd=0x{:X} cursor_valid={} cursor={},{}",
+                      reinterpret_cast<std::uintptr_t>(g_hwnd),
+                      cursorValid,
+                      cursor.x,
+                      cursor.y);
     }
 } // namespace
 
@@ -184,7 +226,7 @@ namespace AltairFix::UI::Overlay
         if (ImGui::CreateContext() == nullptr)
         {
             g_failed = true;
-            spdlog::error("Failed to create the ImGui context; the overlay is disabled.");
+            spdlog::error("[overlay] initialization failed stage=imgui-context");
             return;
         }
 
@@ -199,7 +241,7 @@ namespace AltairFix::UI::Overlay
         if (!ImGui_ImplWin32_Init(hwnd))
         {
             g_failed = true;
-            spdlog::error("Failed to initialize the Win32 ImGui backend; the overlay is disabled.");
+            spdlog::error("[overlay] initialization failed stage=win32-backend hwnd=0x{:X}", reinterpret_cast<std::uintptr_t>(hwnd));
             if (io.BackendPlatformUserData != nullptr)
             {
                 ImGui_ImplWin32_Shutdown();
@@ -211,7 +253,7 @@ namespace AltairFix::UI::Overlay
         if (!ImGui_ImplDX9_Init(device))
         {
             g_failed = true;
-            spdlog::error("Failed to initialize the DX9 ImGui backend; the overlay is disabled.");
+            spdlog::error("[overlay] initialization failed stage=dx9-backend device=0x{:X}", reinterpret_cast<std::uintptr_t>(device));
             if (io.BackendRendererUserData != nullptr)
             {
                 ImGui_ImplDX9_Shutdown();
@@ -221,10 +263,24 @@ namespace AltairFix::UI::Overlay
             return;
         }
 
+        const bool unicode = IsWindowUnicode(hwnd) != FALSE;
         Input::Install(hwnd);
         g_hwnd = hwnd;
         g_initialized = true;
-        spdlog::info("ImGui overlay initialized (DirectX 9, HWND 0x{:X}); press Insert to show it.", reinterpret_cast<std::uintptr_t>(hwnd));
+
+        RECT client{};
+        if (GetClientRect(hwnd, &client) == FALSE)
+        {
+            client = {};
+        }
+
+        spdlog::info("[overlay] initialized imgui={} platform=win32 renderer=dx9 device=0x{:X} hwnd=0x{:X} client={}x{} unicode={} ini=disabled log=disabled",
+                     ImGui::GetVersion(),
+                     reinterpret_cast<std::uintptr_t>(device),
+                     reinterpret_cast<std::uintptr_t>(hwnd),
+                     client.right - client.left,
+                     client.bottom - client.top,
+                     unicode);
     }
 
     void Render()
@@ -258,6 +314,7 @@ namespace AltairFix::UI::Overlay
         {
             ResetImGuiInputState();
             io.DeltaTime = std::min(io.DeltaTime, 1.0F / 15.0F);
+            spdlog::info("[overlay] window visible t=+{}ms", AltairFix::Logging::ElapsedMilliseconds());
         }
 
         ImGui::NewFrame();
@@ -272,6 +329,15 @@ namespace AltairFix::UI::Overlay
 
         if (notificationAlpha > 0.0F)
         {
+            if (!g_notificationDrawn)
+            {
+                g_notificationDrawn = true;
+                spdlog::info("[overlay] notification draw alpha={:.2f} display={}x{} t=+{}ms",
+                             notificationAlpha,
+                             static_cast<int>(io.DisplaySize.x),
+                             static_cast<int>(io.DisplaySize.y),
+                             AltairFix::Logging::ElapsedMilliseconds());
+            }
             AltairFix::UI::DrawWelcomeNotification(g_renderer, notificationAlpha);
         }
 
@@ -280,11 +346,11 @@ namespace AltairFix::UI::Overlay
         g_lastRenderedVisible = visible;
     }
 
-    void NotifyGamePresented()
+    void NotifyGamePresented(const char* source)
     {
         if (!g_gamePresented.exchange(true, std::memory_order_acq_rel))
         {
-            spdlog::info("Game presented its first frame; overlay frames enabled.");
+            spdlog::info("[present] first frame source={} t=+{}ms", source, AltairFix::Logging::ElapsedMilliseconds());
         }
     }
 
@@ -296,6 +362,8 @@ namespace AltairFix::UI::Overlay
         while (!g_visible.compare_exchange_weak(expected, !expected, std::memory_order_acq_rel, std::memory_order_relaxed))
         {
         }
+
+        spdlog::info("[overlay] toggle visible={} t=+{}ms", g_visible.load(std::memory_order_acquire), AltairFix::Logging::ElapsedMilliseconds());
     }
 
     bool IsInitialized()

@@ -24,7 +24,8 @@ namespace AltairFix::UI::Overlay
     void Render();
 
     /// @brief Records that the game has presented its first frame.
-    void NotifyGamePresented();
+    /// @param source Present path that observed the frame ("device" or "swapchain").
+    void NotifyGamePresented(const char* source);
 
     /// @brief Toggles the overlay window.
     void Toggle();

@@ -1,5 +1,6 @@
 #include "UI/Direct3D9Overlay.h"
 
+#include "Logging/Logging.h"
 #include "UI/Overlay.h"
 
 #include <spdlog/spdlog.h>
@@ -43,10 +44,16 @@ namespace
     /// retrying and stops logging.
     bool g_windowFailureLogged = false;
 
-    /// @brief Marks the game as ready to host overlay frames.
-    void OnGamePresent(safetyhook::Context& /*ctx*/)
+    /// @brief Marks the game as ready after the device Present path runs.
+    void OnDevicePresent(safetyhook::Context& /*ctx*/)
     {
-        AltairFix::UI::Overlay::NotifyGamePresented();
+        AltairFix::UI::Overlay::NotifyGamePresented("device");
+    }
+
+    /// @brief Marks the game as ready after the swap-chain Present path runs.
+    void OnSwapChainPresent(safetyhook::Context& /*ctx*/)
+    {
+        AltairFix::UI::Overlay::NotifyGamePresented("swapchain");
     }
 
     /// @brief Installs a MidHook on the device or swap-chain Present method.
@@ -59,53 +66,77 @@ namespace
         }
         g_presentGateAttempted = true;
 
-        const auto install = [](void* target, safetyhook::MidHook** destination, const char* label)
+        const auto install = [](void* target, safetyhook::MidHookFn callback, safetyhook::MidHook** destination, const char* path)
         {
             if (target == nullptr)
             {
+                spdlog::warn("[present] gate skipped path={} reason=missing-target", path);
                 return false;
             }
 
-            auto created = safetyhook::MidHook::create(target, &OnGamePresent);
+            auto created = safetyhook::MidHook::create(target, callback);
             if (!created)
             {
-                spdlog::warn("Cannot install the {} present gate: safetyhook error {}.", label, static_cast<int>(created.error().type));
+                spdlog::warn("[present] gate install failed path={} target=0x{:X} safetyhook_error={}",
+                             path,
+                             reinterpret_cast<std::uintptr_t>(target),
+                             static_cast<int>(created.error().type));
                 return false;
             }
 
             auto* hook = new (std::nothrow) safetyhook::MidHook(std::move(*created));
             if (hook == nullptr)
             {
-                spdlog::warn("Cannot install the {} present gate: out of memory.", label);
+                spdlog::warn("[present] gate install failed path={} target=0x{:X} reason=out-of-memory", path, reinterpret_cast<std::uintptr_t>(target));
                 return false;
             }
 
             *destination = hook;
-            spdlog::info("{} present gate installed.", label);
+            spdlog::info("[present] gate installed path={} target=0x{:X} t=+{}ms",
+                         path,
+                         reinterpret_cast<std::uintptr_t>(target),
+                         AltairFix::Logging::ElapsedMilliseconds());
             return true;
         };
 
         void* const* vtable = *reinterpret_cast<void***>(device);
+        spdlog::info("[present] probing device=0x{:X} vtable=0x{:X}", reinterpret_cast<std::uintptr_t>(device), reinterpret_cast<std::uintptr_t>(vtable));
+
         void* devicePresent = vtable != nullptr ? vtable[17] : nullptr; // IDirect3DDevice9::Present
-        bool installed = install(devicePresent, &g_devicePresentHook, "Direct3D 9 device");
+        bool installed = install(devicePresent, &OnDevicePresent, &g_devicePresentHook, "device");
 
         IDirect3DSwapChain9* swapChain = nullptr;
-        if (SUCCEEDED(device->GetSwapChain(0, &swapChain)) && swapChain != nullptr)
+        const HRESULT swapChainResult = device->GetSwapChain(0, &swapChain);
+        if (FAILED(swapChainResult) || swapChain == nullptr)
+        {
+            spdlog::debug("[present] swapchain unavailable hr=0x{:08X} ({})",
+                          static_cast<std::uint32_t>(swapChainResult),
+                          AltairFix::Logging::Win32ErrorMessage(static_cast<DWORD>(swapChainResult)));
+        }
+        else
         {
             void* const* swapChainVtable = *reinterpret_cast<void***>(swapChain);
             void* swapChainPresent = swapChainVtable != nullptr ? swapChainVtable[3] : nullptr; // IDirect3DSwapChain9::Present
+            spdlog::debug("[present] swapchain=0x{:X} vtable=0x{:X} present=0x{:X}",
+                          reinterpret_cast<std::uintptr_t>(swapChain),
+                          reinterpret_cast<std::uintptr_t>(swapChainVtable),
+                          reinterpret_cast<std::uintptr_t>(swapChainPresent));
             swapChain->Release();
 
             if (swapChainPresent != nullptr && swapChainPresent != devicePresent)
             {
-                installed = install(swapChainPresent, &g_swapChainPresentHook, "Direct3D 9 swap chain") || installed;
+                installed = install(swapChainPresent, &OnSwapChainPresent, &g_swapChainPresentHook, "swapchain") || installed;
+            }
+            else
+            {
+                spdlog::debug("[present] gate skipped path=swapchain reason=same-target target=0x{:X}", reinterpret_cast<std::uintptr_t>(swapChainPresent));
             }
         }
 
         if (!installed)
         {
-            spdlog::warn("Cannot install a present gate; the overlay will render immediately.");
-            AltairFix::UI::Overlay::NotifyGamePresented();
+            spdlog::warn("[present] gate unavailable; overlay renders immediately");
+            AltairFix::UI::Overlay::NotifyGamePresented("fallback");
         }
     }
 
@@ -138,10 +169,14 @@ namespace
             }
 
             D3DDEVICE_CREATION_PARAMETERS parameters{.DeviceType = D3DDEVTYPE_HAL};
-            if (FAILED(device->GetCreationParameters(&parameters)) || parameters.hFocusWindow == nullptr)
+            const HRESULT result = device->GetCreationParameters(&parameters);
+            if (FAILED(result) || parameters.hFocusWindow == nullptr)
             {
                 g_windowFailureLogged = true;
-                spdlog::warn("Cannot initialize the ImGui overlay: the game window is unavailable.");
+                spdlog::warn("[overlay] initialization failed reason=window-unavailable hr=0x{:08X} ({}) hwnd=0x{:X}",
+                             static_cast<std::uint32_t>(result),
+                             AltairFix::Logging::Win32ErrorMessage(static_cast<DWORD>(result)),
+                             reinterpret_cast<std::uintptr_t>(parameters.hFocusWindow));
                 return;
             }
 
@@ -165,6 +200,7 @@ namespace AltairFix::UI
         HMODULE module = GetModuleHandleW(nullptr);
         if (module == nullptr)
         {
+            spdlog::warn("[overlay] display hook skipped reason=main-module-unavailable");
             return;
         }
 
@@ -173,24 +209,31 @@ namespace AltairFix::UI
 
         if (!std::equal(kEndDisplaySignature.begin(), kEndDisplaySignature.end(), target))
         {
-            spdlog::warn("DX9 overlay disabled: the display hook signature does not match this executable.");
+            spdlog::warn("[overlay] display hook disabled reason=signature-mismatch target=0x{:X} module_base=0x{:X}",
+                         reinterpret_cast<std::uintptr_t>(target),
+                         reinterpret_cast<std::uintptr_t>(moduleBase));
             return;
         }
 
         auto created = safetyhook::MidHook::create(static_cast<void*>(target), &OnEndDisplay);
         if (!created)
         {
-            spdlog::warn("Cannot install the DX9 overlay hook: safetyhook error {}.", static_cast<int>(created.error().type));
+            spdlog::warn("[overlay] display hook install failed target=0x{:X} safetyhook_error={}",
+                         reinterpret_cast<std::uintptr_t>(target),
+                         static_cast<int>(created.error().type));
             return;
         }
 
         g_hook = new (std::nothrow) safetyhook::MidHook(std::move(*created));
         if (g_hook == nullptr)
         {
-            spdlog::warn("Cannot install the DX9 overlay hook: out of memory.");
+            spdlog::warn("[overlay] display hook install failed target=0x{:X} reason=out-of-memory", reinterpret_cast<std::uintptr_t>(target));
             return;
         }
 
-        spdlog::info("DX9 overlay hook installed at 0x{:X}.", reinterpret_cast<std::uintptr_t>(target));
+        spdlog::info("[overlay] display hook installed target=0x{:X} module_base=0x{:X} t=+{}ms",
+                     reinterpret_cast<std::uintptr_t>(target),
+                     reinterpret_cast<std::uintptr_t>(moduleBase),
+                     AltairFix::Logging::ElapsedMilliseconds());
     }
 } // namespace AltairFix::UI

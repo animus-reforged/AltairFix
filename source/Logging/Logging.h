@@ -20,6 +20,9 @@
 
 #include <windows.h>
 
+#include <cstdint>
+#include <string>
+
 namespace AltairFix::Logging
 {
     /// Runtime logging options supplied by the configuration file.
@@ -56,6 +59,15 @@ namespace AltairFix::Logging
     ///       again, which keeps a manual ASI reload consistent with a fresh
     ///       game launch.
     [[nodiscard]] bool Initialize(HMODULE module, const Options& options);
+
+    /// @brief Milliseconds elapsed since logging was initialized.
+    /// @return Elapsed milliseconds, or 0 when logging is not active.
+    [[nodiscard]] std::int64_t ElapsedMilliseconds();
+
+    /// @brief Returns the system text for a Win32 error code.
+    /// @param error Error code from GetLastError or a Win32 API.
+    /// @return Human-readable error text, never empty.
+    [[nodiscard]] std::string Win32ErrorMessage(DWORD error);
 
     /// @brief Flushes pending records and releases the log file.
     ///

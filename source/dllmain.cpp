@@ -42,6 +42,8 @@ namespace
     /// @return Always 0.
     DWORD WINAPI InstallRendererHook(LPVOID /*unused*/)
     {
+        spdlog::info("[core] hook worker started t=+{}ms", AltairFix::Logging::ElapsedMilliseconds());
+
         AltairFix::Game::InstallRendererConfirmationHook(g_detectedRenderer);
 
         if (g_detectedRenderer == AltairFix::Game::Renderer::Direct3D9)
@@ -50,10 +52,10 @@ namespace
         }
         else if (g_detectedRenderer == AltairFix::Game::Renderer::Direct3D10)
         {
-            spdlog::info("The in-game UI is not implemented for Direct3D 10 yet.");
+            spdlog::info("[overlay] unavailable renderer=Direct3D 10 reason=not-implemented");
         }
 
-        spdlog::info("Startup message box removed; the in-game overlay is the new entry point.");
+        spdlog::info("[core] hook worker complete t=+{}ms", AltairFix::Logging::ElapsedMilliseconds());
         return 0;
     }
 } // namespace
@@ -97,22 +99,26 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
     const bool loggingReady = AltairFix::Logging::Initialize(module, loggingOptions);
     if (loggingReady)
     {
-        spdlog::info("AltairFix {} attached to the game process.", config.settings.metadata.version);
-        if (!config.path.empty())
-        {
-            spdlog::info("Configuration: {}{}.", AltairFix::Paths::ToUtf8(config.path.wstring()), config.createdDefaultFile ? " (defaults created)" : "");
-        }
+        const std::string configPath = config.path.empty() ? "<unresolved>" : AltairFix::Paths::ToUtf8(config.path.wstring());
+        spdlog::info("[core] AltairFix {} attached t=+{}ms", config.settings.metadata.version, AltairFix::Logging::ElapsedMilliseconds());
+        spdlog::info("[config] path={} file_version={} defaults_created={} logging={} log_level={}",
+                     configPath,
+                     config.settings.metadata.version,
+                     config.createdDefaultFile,
+                     config.settings.debug.enableLogging,
+                     config.settings.debug.logLevel);
         if (!config.warning.empty())
         {
-            spdlog::warn("{}", config.warning);
+            spdlog::warn("[config] warning={}", config.warning);
         }
-        spdlog::info("Renderer: {} (detected from the executable import table).", AltairFix::Game::GetRendererName(renderer));
-        spdlog::info("DirectX version: {}.", AltairFix::Game::GetDirectXVersionLabel(renderer));
+        spdlog::info("[renderer] detected name={} dx={} source=executable-import-table",
+                     AltairFix::Game::GetRendererName(renderer),
+                     AltairFix::Game::GetDirectXVersionLabel(renderer));
         if (renderer == AltairFix::Game::Renderer::Unknown)
         {
-            spdlog::warn("Renderer could not be identified; version-specific features will stay disabled.");
+            spdlog::warn("[renderer] detection failed; version-specific features disabled");
         }
-        spdlog::debug("Debug logging is enabled.");
+        spdlog::debug("[config] debug logging active level={}", config.settings.debug.logLevel);
     }
 
     if (renderer != AltairFix::Game::Renderer::Unknown)
@@ -126,7 +132,8 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
         }
         else if (loggingReady)
         {
-            spdlog::error("Failed to create the renderer-hook thread (error {}).", GetLastError());
+            const DWORD error = GetLastError();
+            spdlog::error("[core] hook worker thread creation failed win32=0x{:08X} ({})", error, AltairFix::Logging::Win32ErrorMessage(error));
         }
     }
 

@@ -1,5 +1,7 @@
 #include "Game/RendererHook.h"
 
+#include "Logging/Logging.h"
+
 #include <spdlog/spdlog.h>
 #include <windows.h>
 
@@ -29,7 +31,7 @@ namespace
     {
         if (!g_deviceCreationReported.exchange(true))
         {
-            spdlog::info("{} device creation observed.", rendererName);
+            spdlog::info("[renderer] {} device creation observed t=+{}ms", rendererName, AltairFix::Logging::ElapsedMilliseconds());
         }
     }
 
@@ -108,37 +110,51 @@ namespace AltairFix::Game
         void* destination = nullptr;
         if (!ResolveHookTarget(renderer, moduleName, moduleLabel, functionName, destination))
         {
-            spdlog::warn("Cannot install a renderer confirmation hook: the renderer is unknown.");
+            spdlog::warn("[renderer] confirmation hook skipped reason=unknown-renderer");
             return;
         }
 
         HMODULE module = GetModuleHandleW(moduleName);
         if (module == nullptr)
         {
-            spdlog::warn("Cannot install the {} confirmation hook: {} is not loaded.", GetRendererName(renderer), moduleLabel);
+            spdlog::warn("[renderer] confirmation hook skipped name={} module={} reason=module-not-loaded", GetRendererName(renderer), moduleLabel);
             return;
         }
 
         FARPROC target = GetProcAddress(module, functionName);
         if (target == nullptr)
         {
-            spdlog::warn("Cannot install the {} confirmation hook: {} was not found.", GetRendererName(renderer), functionName);
+            spdlog::warn("[renderer] confirmation hook skipped name={} module={} export={} reason=export-not-found",
+                         GetRendererName(renderer),
+                         moduleLabel,
+                         functionName);
             return;
         }
+
+        spdlog::info("[renderer] confirmation hook target name={} module={} export={} address=0x{:X}",
+                     GetRendererName(renderer),
+                     moduleLabel,
+                     functionName,
+                     reinterpret_cast<std::uintptr_t>(target));
 
         // Create disabled so the callback cannot run before g_hook points at the
         // installed hook object.
         auto created = safetyhook::InlineHook::create(target, destination, safetyhook::InlineHook::StartDisabled);
         if (!created)
         {
-            spdlog::warn("Cannot install the {} confirmation hook: safetyhook error {}.", GetRendererName(renderer), static_cast<int>(created.error().type));
+            spdlog::warn("[renderer] confirmation hook install failed name={} target=0x{:X} safetyhook_error={}",
+                         GetRendererName(renderer),
+                         reinterpret_cast<std::uintptr_t>(target),
+                         static_cast<int>(created.error().type));
             return;
         }
 
         auto* hook = new (std::nothrow) safetyhook::InlineHook(std::move(*created));
         if (hook == nullptr)
         {
-            spdlog::warn("Cannot install the {} confirmation hook: out of memory.", GetRendererName(renderer));
+            spdlog::warn("[renderer] confirmation hook install failed name={} target=0x{:X} reason=out-of-memory",
+                         GetRendererName(renderer),
+                         reinterpret_cast<std::uintptr_t>(target));
             return;
         }
 
@@ -146,12 +162,21 @@ namespace AltairFix::Game
         const auto enabled = g_hook->enable();
         if (!enabled)
         {
-            spdlog::warn("Cannot enable the {} confirmation hook: safetyhook error {}.", GetRendererName(renderer), static_cast<int>(enabled.error().type));
+            spdlog::warn("[renderer] confirmation hook enable failed name={} target=0x{:X} safetyhook_error={}",
+                         GetRendererName(renderer),
+                         reinterpret_cast<std::uintptr_t>(target),
+                         static_cast<int>(enabled.error().type));
             delete g_hook;
             g_hook = nullptr;
             return;
         }
 
-        spdlog::info("Renderer confirmation hook installed on {}!{}.", moduleLabel, functionName);
+        spdlog::info("[renderer] confirmation hook installed name={} module={} export={} address=0x{:X} hook=0x{:X} t=+{}ms",
+                     GetRendererName(renderer),
+                     moduleLabel,
+                     functionName,
+                     reinterpret_cast<std::uintptr_t>(target),
+                     reinterpret_cast<std::uintptr_t>(hook),
+                     AltairFix::Logging::ElapsedMilliseconds());
     }
 } // namespace AltairFix::Game

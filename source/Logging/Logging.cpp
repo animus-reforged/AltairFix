@@ -4,10 +4,14 @@
 
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
+#include <winternl.h>
 
+#include <chrono>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <utility>
 
 namespace
@@ -21,8 +25,42 @@ namespace
     /// users and support tooling can find it without inspecting the directory.
     constexpr const wchar_t* LOG_FILE_NAME = L"AltairFix.log";
 
-    /// One line per record: local time, severity, message.
-    constexpr const char* LOG_PATTERN = "[%Y-%m-%d %H:%M:%S.%e] [%l] %v";
+    /// One line per record: local time, severity, process/thread, message.
+    constexpr const char* LOG_PATTERN = "[%Y-%m-%d %H:%M:%S.%e] [%l] [%P:%t] %v";
+
+    /// Time source origin for ElapsedMilliseconds().
+    std::int64_t g_startedAtMs = 0;
+
+    /// @brief Returns the current steady-clock time in milliseconds.
+    std::int64_t NowMilliseconds()
+    {
+        return static_cast<std::int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+
+    /// @brief Logs the Windows version through ntdll's RtlGetVersion.
+    void LogOsVersion()
+    {
+        using RtlGetVersionFn = LONG(WINAPI*)(RTL_OSVERSIONINFOW*);
+
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        if (ntdll == nullptr)
+        {
+            return;
+        }
+
+        const auto rtlGetVersion = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdll, "RtlGetVersion"));
+        if (rtlGetVersion == nullptr)
+        {
+            return;
+        }
+
+        RTL_OSVERSIONINFOW version{};
+        version.dwOSVersionInfoSize = static_cast<ULONG>(sizeof(version));
+        if (rtlGetVersion(&version) == 0)
+        {
+            spdlog::info("[core] os={}.{}.{}", version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber);
+        }
+    }
 
     /// @brief Maps the numeric configuration verbosity to an spdlog level.
     ///
@@ -96,13 +134,21 @@ namespace AltairFix::Logging
             logger->flush_on(spdlog::level::trace);
             spdlog::set_default_logger(std::move(logger));
 
-            spdlog::info("Logging initialized (spdlog {}.{}.{}, level {}).",
+            g_startedAtMs = NowMilliseconds();
+
+            spdlog::info("[core] logging initialized level={} spdlog={}.{}.{}",
+                         spdlog::level::to_string_view(level),
                          SPDLOG_VER_MAJOR,
                          SPDLOG_VER_MINOR,
-                         SPDLOG_VER_PATCH,
-                         spdlog::level::to_string_view(level));
-            spdlog::info("Module: {}", Paths::ToUtf8(Paths::GetModulePath(module).wstring()));
-            spdlog::info("Log file: {} (recreated for this launch).", Paths::ToUtf8(logPath.wstring()));
+                         SPDLOG_VER_PATCH);
+            spdlog::info("[core] log file={} mode=truncate", Paths::ToUtf8(logPath.wstring()));
+            spdlog::info("[core] game={} pid={} build={} {}",
+                         Paths::ToUtf8(Paths::GetModulePath(nullptr).wstring()),
+                         GetCurrentProcessId(),
+                         __DATE__,
+                         __TIME__);
+            spdlog::info("[core] module base=0x{:X} path={}", reinterpret_cast<std::uintptr_t>(module), Paths::ToUtf8(Paths::GetModulePath(module).wstring()));
+            LogOsVersion();
             return true;
         }
         catch (const std::exception& error)
@@ -116,6 +162,27 @@ namespace AltairFix::Logging
             OutputDebugStringA(message.c_str());
             return false;
         }
+    }
+
+    std::int64_t ElapsedMilliseconds()
+    {
+        if (g_startedAtMs == 0)
+        {
+            return 0;
+        }
+        return NowMilliseconds() - g_startedAtMs;
+    }
+
+    std::string Win32ErrorMessage(DWORD error)
+    {
+        if (error == 0)
+        {
+            return "success";
+        }
+
+        const std::error_code code(static_cast<int>(error), std::system_category());
+        const std::string message = code.message();
+        return message.empty() ? "unknown error" : message;
     }
 
     void Shutdown()
