@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 4.4)
-project(AltairFix LANGUAGES CXX)
+project(AltairFix VERSION 1.0.0 LANGUAGES CXX)
 
 if(NOT MINGW)
     message(FATAL_ERROR
@@ -25,11 +25,18 @@ include(cmake/Dependencies.cmake)
 # responsibility in subdirectories such as source/Logging/.
 add_library(AltairFix SHARED
     source/dllmain.cpp
-    source/Logging/Logging.cpp)
+    source/Config/Config.cpp
+    source/Logging/Logging.cpp
+    source/Paths/Paths.cpp)
 target_include_directories(AltairFix PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/source")
 target_link_libraries(AltairFix PRIVATE
     spdlog::spdlog
+    tomlplusplus::tomlplusplus
     user32)
+
+# The configuration module records this value in a freshly created
+# AltairFix.toml and uses it in startup log records.
+target_compile_definitions(AltairFix PRIVATE ALTAIRFIX_VERSION="${PROJECT_VERSION}")
 
 # Keep the ASI a single-file drop-in. Without static runtime linking, llvm-mingw
 # would make AltairFix.asi import libc++.dll and libunwind.dll, which the game

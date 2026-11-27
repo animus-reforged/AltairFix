@@ -22,6 +22,16 @@
 
 namespace AltairFix::Logging
 {
+    /// Runtime logging options supplied by the configuration file.
+    struct Options
+    {
+        /// Whether file logging is enabled.
+        bool enabled = true;
+
+        /// Verbosity from 0 (trace) to 6 (off).
+        int verbosity = 2;
+    };
+
     /// @brief Initializes file logging next to the loaded ASI.
     ///
     /// Creates (or truncates) @c AltairFix.log in the directory containing the
@@ -37,14 +47,15 @@ namespace AltairFix::Logging
     ///
     /// @param module Handle of the current ASI module, as supplied to
     ///               @c DllMain. It is used to resolve the ASI directory.
+    /// @param options Configuration-driven logging settings.
     ///
-    /// @return @c true when the logger is ready; @c false when the module path
-    ///         could not be resolved or the log file could not be opened.
+    /// @return @c true when the logger is ready; @c false when logging is
+    ///         disabled, set to off, or the log file could not be opened.
     ///
     /// @note Repeated calls replace the previous logger and truncate the log
     ///       again, which keeps a manual ASI reload consistent with a fresh
     ///       game launch.
-    [[nodiscard]] bool Initialize(HMODULE module);
+    [[nodiscard]] bool Initialize(HMODULE module, const Options& options);
 
     /// @brief Flushes pending records and releases the log file.
     ///

@@ -12,6 +12,12 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/spdlog/CMakeLists.txt")
         "Fetch it with: git submodule update --init --recursive")
 endif()
 
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/tomlplusplus/CMakeLists.txt")
+    message(FATAL_ERROR
+        "The tomlplusplus submodule is missing.\n"
+        "Fetch it with: git submodule update --init --recursive")
+endif()
+
 # spdlog is the diagnostic logging backend. It is compiled as a static library
 # and linked into AltairFix.asi, keeping the mod a single-file deployment with
 # no extra runtime DLLs to install.
@@ -32,4 +38,15 @@ set(SPDLOG_SYSTEM_INCLUDES ON CACHE BOOL "AltairFix: include spdlog as a system 
 add_subdirectory(
     "${CMAKE_CURRENT_SOURCE_DIR}/external/spdlog"
     "${CMAKE_CURRENT_BINARY_DIR}/external/spdlog"
+    EXCLUDE_FROM_ALL)
+
+# toml++ parses AltairFix.toml. It is consumed header-only, so there is no
+# dependency library to link; only the interface target is needed.
+set(tomlplusplus_BUILD_LIB OFF CACHE BOOL "AltairFix: consume toml++ header-only" FORCE)
+set(tomlplusplus_INSTALL OFF CACHE BOOL "AltairFix: do not generate toml++ install rules" FORCE)
+set(tomlplusplus_INCLUDES_WITH_SYSTEM ON CACHE BOOL "AltairFix: include toml++ as a system header" FORCE)
+
+add_subdirectory(
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/tomlplusplus"
+    "${CMAKE_CURRENT_BINARY_DIR}/external/tomlplusplus"
     EXCLUDE_FROM_ALL)

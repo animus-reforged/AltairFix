@@ -13,7 +13,9 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#include "Config/Config.h"
 #include "Logging/Logging.h"
+#include "Paths/Paths.h"
 
 #include <spdlog/spdlog.h>
 #include <windows.h>
@@ -43,9 +45,9 @@ namespace
 
 /// @brief DLL entry point invoked by Ultimate ASI Loader.
 ///
-/// On @c DLL_PROCESS_ATTACH the function prepares logging and starts the
-/// welcome-message thread. Other notifications are ignored except for
-/// @c DLL_PROCESS_DETACH, which flushes and closes the log.
+/// On @c DLL_PROCESS_ATTACH the function loads @c AltairFix.toml, prepares
+/// logging, and starts the welcome-message thread. Other notifications are
+/// ignored except for @c DLL_PROCESS_DETACH, which flushes and closes the log.
 ///
 /// @param module Module handle of this ASI. It determines where the log file is
 ///               written.
@@ -68,12 +70,26 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
 
     DisableThreadLibraryCalls(module);
 
+    // Read the configuration first: its [debug] table decides whether and at
+    // what verbosity file logging is created.
+    const AltairFix::Config::LoadResult config = AltairFix::Config::Load(module);
+    const AltairFix::Logging::Options loggingOptions{.enabled = config.settings.debug.enableLogging, .verbosity = config.settings.debug.logLevel};
+
     // Open the log before any other work so early failures and the exact ASI
     // location are captured for support reports.
-    const bool loggingReady = AltairFix::Logging::Initialize(module);
+    const bool loggingReady = AltairFix::Logging::Initialize(module, loggingOptions);
     if (loggingReady)
     {
-        spdlog::info("AltairFix attached to the game process.");
+        spdlog::info("AltairFix {} attached to the game process.", config.settings.metadata.version);
+        if (!config.path.empty())
+        {
+            spdlog::info("Configuration: {}{}.", AltairFix::Paths::ToUtf8(config.path.wstring()), config.createdDefaultFile ? " (defaults created)" : "");
+        }
+        if (!config.warning.empty())
+        {
+            spdlog::warn("{}", config.warning);
+        }
+        spdlog::debug("Debug logging is enabled.");
     }
 
     HANDLE thread = CreateThread(nullptr, 0, ShowInjectedMessage, nullptr, 0, nullptr);
