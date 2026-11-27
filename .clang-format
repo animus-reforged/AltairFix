@@ -33,6 +33,11 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 ReferenceAlignment: Pointer
 
+# Comments
+# Keep doc comments wrapped exactly as written. Reflowing block comments can
+# also emit bare LF inside an otherwise CRLF file.
+ReflowComments: false
+
 # Includes
 SortIncludes: CaseInsensitive
 IncludeBlocks: Regroup

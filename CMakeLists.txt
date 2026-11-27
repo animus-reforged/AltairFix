@@ -19,10 +19,22 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(cmake/GameEnvironment.cmake)
+include(cmake/Dependencies.cmake)
 
-add_library(AltairFix SHARED source/dllmain.cpp)
+# The ASI entry point stays at the root of source/; feature code is grouped by
+# responsibility in subdirectories such as source/Logging/.
+add_library(AltairFix SHARED
+    source/dllmain.cpp
+    source/Logging/Logging.cpp)
 target_include_directories(AltairFix PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/source")
-target_link_libraries(AltairFix PRIVATE user32)
+target_link_libraries(AltairFix PRIVATE
+    spdlog::spdlog
+    user32)
+
+# Keep the ASI a single-file drop-in. Without static runtime linking, llvm-mingw
+# would make AltairFix.asi import libc++.dll and libunwind.dll, which the game
+# does not ship.
+target_link_options(AltairFix PRIVATE -static)
 
 set_target_properties(AltairFix PROPERTIES
     PREFIX ""
