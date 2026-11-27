@@ -5,6 +5,8 @@
 #include <spdlog/spdlog.h>
 #include <windows.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <new>
@@ -15,14 +17,60 @@ namespace
 {
     using AltairFix::Game::Renderer;
 
+    /// Preferred image base of the DX9 executable.
+    constexpr std::uintptr_t kImageBase = 0x00400000;
+
+    /// First byte of the signature checked before installing the cleanup guard.
+    constexpr std::uintptr_t kDisplayCleanupSignatureAddress = 0x00A1ED02;
+
+    /// Store instruction inside FUN_00a1ecd0 that receives the bad pointer.
+    constexpr std::uintptr_t kDisplayCleanupStoreAddress = 0x00A1ED0B;
+
+    /// First byte of the signature for the cleanup-loop count check.
+    constexpr std::uintptr_t kDisplayCleanupCountSignatureAddress = 0x00A50D3D;
+
+    /// Branch that skips the cleanup loop when its count is implausible.
+    constexpr std::uintptr_t kDisplayCleanupCountCheckAddress = 0x00A50D40;
+
+    /// Bytes from 0xA50D3D through 0xA50D58 in the retail DX9 build:
+    /// cmp [ebx+0x18],edi; jle ...; push esi; lea esi,[ebx+4]; ...
+    constexpr std::array<std::uint8_t, 28> kDisplayCleanupCountSignature = {
+        0x39, 0x7B, 0x18, 0x7E, 0x23, 0x56, 0x8D, 0x73, 0x04, 0x83, 0x3E, 0x00, 0x74, 0x0E,
+        0x8B, 0x4E, 0xFC, 0xE8, 0xBD, 0x41, 0x05, 0x00, 0xC7, 0x06, 0x00, 0x00, 0x00, 0x00,
+    };
+
+    /// Largest cleanup count considered to belong to a valid container.
+    constexpr int kMaximumDisplayCleanupEntries = 0x1000;
+
+    /// x86 EFLAGS zero flag. Setting it forces the following @c jle.
+    constexpr std::uintptr_t kEflagsZeroFlag = 0x40;
+
+    /// Bytes from 0xA1ED02 through 0xA1ED16 in the retail DX9 build:
+    /// mov edx,[esi+8]; add edx,0x670; mov [ecx+0x110],edx; pop esi; jmp ...
+    constexpr std::array<std::uint8_t, 21> kDisplayCleanupSignature = {
+        0x8B, 0x56, 0x08, 0x81, 0xC2, 0x70, 0x06, 0x00, 0x00, 0x89, 0x91, 0x10, 0x01, 0x00, 0x00, 0x5E, 0xE9, 0x19, 0x9E, 0xFC, 0xFF,
+    };
+
     /// Inline hook that confirms which renderer API called device creation.
     ///
     /// Allocated for the process lifetime. Removing the hook during DLL detach
     /// would run safetyhook's thread suspension while the loader lock is held.
     safetyhook::InlineHook* g_hook = nullptr;
 
+    /// MidHook that prevents the display cleanup from dereferencing 0x670.
+    safetyhook::MidHook* g_displayCleanupGuard = nullptr;
+
+    /// MidHook that skips the display cleanup when its count is implausible.
+    safetyhook::MidHook* g_displayCleanupCountGuard = nullptr;
+
     /// Ensures the confirmation is logged only once.
     std::atomic_bool g_deviceCreationReported = false;
+
+    /// Ensures the cleanup guard's first trigger is logged at warning level.
+    std::atomic_bool g_displayCleanupGuardReported = false;
+
+    /// Ensures the count guard's first trigger is logged at warning level.
+    std::atomic_bool g_displayCleanupCountGuardReported = false;
 
     /// @brief Logs the first renderer device creation.
     ///
@@ -32,6 +80,75 @@ namespace
         if (!g_deviceCreationReported.exchange(true))
         {
             spdlog::info("[renderer] {} device creation observed t=+{}ms", rendererName, AltairFix::Logging::ElapsedMilliseconds());
+        }
+    }
+
+    /// @brief Replaces the null-plus-offset store in @c FUN_00a1ecd0.
+    ///
+    /// At the hooked store, ECX is the display object, ESI is the renderer, and
+    /// EDX is `renderer->display + 0x670`. When the renderer has no display
+    /// pointer, EDX is the bare offset 0x670. The following cleanup treats that
+    /// as an object pointer, so store null and clear the slot's active flag
+    /// instead. The cleanup loop skips inactive slots.
+    // NOLINTNEXTLINE(misc-const-correctness) - safetyhook passes a mutable Context.
+    void OnDisplayCleanupStore(safetyhook::Context& ctx)
+    {
+        constexpr std::uintptr_t kMinimumUserPointer = 0x10000;
+        if (ctx.edx >= kMinimumUserPointer)
+        {
+            return;
+        }
+
+        const std::uintptr_t badPointer = ctx.edx;
+        ctx.edx = 0;
+
+        if (ctx.ecx != 0)
+        {
+            auto* activeFlag = reinterpret_cast<std::uint32_t*>(ctx.ecx + 0x114); // NOLINT(performance-no-int-to-ptr)
+            *activeFlag = 0;
+        }
+
+        if (!g_displayCleanupGuardReported.exchange(true, std::memory_order_acq_rel))
+        {
+            spdlog::warn("[renderer] display cleanup store guard prevented invalid slot renderer=0x{:X} display=0x{:X} bad_pointer=0x{:X} action=cleared "
+                         "further_occurrences=suppressed",
+                         static_cast<std::uintptr_t>(ctx.esi),
+                         static_cast<std::uintptr_t>(ctx.ecx),
+                         badPointer);
+        }
+    }
+
+    /// @brief Skips the display cleanup when its container count is implausible.
+    ///
+    /// The cleanup loop uses `container+0x18` as an entry count. During the
+    /// broken renderer reset path that field contains a pointer or code address,
+    /// so the loop walks far past the real container and calls destructors on
+    /// arbitrary values. If the count is larger than any real display container,
+    /// set ZF so the following @c jle jumps to the function epilogue instead.
+    // NOLINTNEXTLINE(misc-const-correctness) - safetyhook passes a mutable Context.
+    void OnDisplayCleanupCount(safetyhook::Context& ctx)
+    {
+        if (ctx.ebx == 0)
+        {
+            return;
+        }
+
+        const int count = *reinterpret_cast<const int*>(ctx.ebx + 0x18); // NOLINT(performance-no-int-to-ptr)
+        if (count <= kMaximumDisplayCleanupEntries)
+        {
+            return;
+        }
+
+        // ZF is set, so the jle at 0xA50D40 jumps to the epilogue at 0xA50D65.
+        ctx.eflags |= kEflagsZeroFlag;
+
+        if (!g_displayCleanupCountGuardReported.exchange(true, std::memory_order_acq_rel))
+        {
+            spdlog::warn("[renderer] display cleanup count guard skipped implausible container container=0x{:X} count={} max={} action=skip "
+                         "further_occurrences=suppressed",
+                         static_cast<std::uintptr_t>(ctx.ebx),
+                         count,
+                         kMaximumDisplayCleanupEntries);
         }
     }
 
@@ -178,5 +295,92 @@ namespace AltairFix::Game
                      reinterpret_cast<std::uintptr_t>(target),
                      reinterpret_cast<std::uintptr_t>(hook),
                      AltairFix::Logging::ElapsedMilliseconds());
+    }
+
+    void InstallRendererDisplayCleanupGuard(Renderer renderer)
+    {
+        if (renderer != Renderer::Direct3D9)
+        {
+            spdlog::debug("[renderer] display cleanup guard skipped renderer={} reason=dx9-only", GetRendererName(renderer));
+            return;
+        }
+
+        if (g_displayCleanupGuard != nullptr && g_displayCleanupCountGuard != nullptr)
+        {
+            return;
+        }
+
+        HMODULE module = GetModuleHandleW(nullptr);
+        if (module == nullptr)
+        {
+            spdlog::warn("[renderer] display cleanup guard skipped reason=main-module-unavailable");
+            return;
+        }
+
+        auto* moduleBase = reinterpret_cast<std::uint8_t*>(module);
+
+        const auto install = [moduleBase](std::uintptr_t signatureAddress,
+                                          std::uintptr_t targetAddress,
+                                          const auto& signature,
+                                          safetyhook::MidHookFn callback,
+                                          safetyhook::MidHook** destination,
+                                          const char* label)
+        {
+            const auto* signaturePtr = moduleBase + (signatureAddress - kImageBase);
+            if (!std::equal(signature.begin(), signature.end(), signaturePtr))
+            {
+                spdlog::warn("[renderer] {} skipped reason=signature-mismatch signature=0x{:X} module_base=0x{:X}",
+                             label,
+                             reinterpret_cast<std::uintptr_t>(signaturePtr),
+                             reinterpret_cast<std::uintptr_t>(moduleBase));
+                return;
+            }
+
+            auto* target = moduleBase + (targetAddress - kImageBase);
+            auto created = safetyhook::MidHook::create(static_cast<void*>(target), callback);
+            if (!created)
+            {
+                spdlog::warn("[renderer] {} install failed target=0x{:X} safetyhook_error={}",
+                             label,
+                             reinterpret_cast<std::uintptr_t>(target),
+                             static_cast<int>(created.error().type));
+                return;
+            }
+
+            auto* hook = new (std::nothrow) safetyhook::MidHook(std::move(*created));
+            if (hook == nullptr)
+            {
+                spdlog::warn("[renderer] {} install failed target=0x{:X} reason=out-of-memory", label, reinterpret_cast<std::uintptr_t>(target));
+                return;
+            }
+
+            *destination = hook;
+            spdlog::info("[renderer] {} installed target=0x{:X} signature=0x{:X} module_base=0x{:X} t=+{}ms",
+                         label,
+                         reinterpret_cast<std::uintptr_t>(target),
+                         reinterpret_cast<std::uintptr_t>(signaturePtr),
+                         reinterpret_cast<std::uintptr_t>(moduleBase),
+                         AltairFix::Logging::ElapsedMilliseconds());
+        };
+
+        if (g_displayCleanupGuard == nullptr)
+        {
+            install(kDisplayCleanupSignatureAddress,
+                    kDisplayCleanupStoreAddress,
+                    kDisplayCleanupSignature,
+                    &OnDisplayCleanupStore,
+                    &g_displayCleanupGuard,
+                    "display cleanup store guard");
+        }
+
+        if (g_displayCleanupCountGuard == nullptr)
+        {
+            install(kDisplayCleanupCountSignatureAddress,
+                    kDisplayCleanupCountCheckAddress,
+                    kDisplayCleanupCountSignature,
+                    &OnDisplayCleanupCount,
+                    &g_displayCleanupCountGuard,
+                    "display cleanup count guard");
+        }
     }
 } // namespace AltairFix::Game

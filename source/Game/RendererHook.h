@@ -1,10 +1,11 @@
 /// @file RendererHook.h
-/// @brief SafetyHook integration for renderer detection.
+/// @brief SafetyHook integration for renderer detection and crash guards.
 ///
 /// The executable import table identifies the DX9 or DX10 build before the game
 /// creates a device. This module adds a safetyhook inline hook to the matching
 /// device creation API so the first call confirms the runtime renderer and
-/// provides a ready hook point for future renderer work.
+/// provides a ready hook point for future renderer work. It also guards a
+/// known null-pointer crash in the retail DX9 renderer reset path.
 
 #ifndef ALTAIRFIX_GAME_RENDERERHOOK_H
 #define ALTAIRFIX_GAME_RENDERERHOOK_H
@@ -27,6 +28,23 @@ namespace AltairFix::Game
     /// @note Installed hooks live for the process lifetime; the mod does not
     ///       support unloading a hooked ASI.
     void InstallRendererConfirmationHook(Renderer renderer);
+
+    /// @brief Guards a known DX9 renderer cleanup crash in the retail game.
+    ///
+    /// The renderer reset path computes `renderer->display + 0x670` and stores
+    /// it in a display cleanup slot without checking whether `display` is null.
+    /// When it is null, the cleanup later treats 0x670 as an object pointer and
+    /// faults. This guard turns the bogus store into a null store, clears the
+    /// slot's active flag, and skips the cleanup loop entirely when its count is
+    /// implausible for a display container.
+    ///
+    /// The hooks are signature-gated and do nothing on unknown builds.
+    ///
+    /// @param renderer Renderer detected from the executable import table.
+    ///
+    /// @note Call this after @c DLL_PROCESS_ATTACH has returned for the same
+    ///       loader-lock reasons as @c InstallRendererConfirmationHook.
+    void InstallRendererDisplayCleanupGuard(Renderer renderer);
 } // namespace AltairFix::Game
 
 #endif // ALTAIRFIX_GAME_RENDERERHOOK_H

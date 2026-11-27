@@ -36,6 +36,9 @@ namespace AltairFix::Config
     /// Default state for @c debug.enable_logging.
     constexpr bool DEFAULT_ENABLE_LOGGING = true;
 
+    /// Default state for @c fixes.renderer_crash_guard.
+    constexpr bool DEFAULT_RENDERER_CRASH_GUARD = true;
+
     /// Contents of the @c [metadata] table.
     struct Metadata
     {
@@ -53,11 +56,19 @@ namespace AltairFix::Config
         int logLevel = DEFAULT_LOG_LEVEL;
     };
 
+    /// Contents of the @c [fixes] table.
+    struct Fixes
+    {
+        /// Whether to guard the known DX9 renderer cleanup crash.
+        bool rendererCrashGuard = DEFAULT_RENDERER_CRASH_GUARD;
+    };
+
     /// All settings exposed by @c AltairFix.toml.
     struct Settings
     {
         Metadata metadata;
         Debug debug;
+        Fixes fixes;
     };
 
     /// Outcome of loading @c AltairFix.toml.

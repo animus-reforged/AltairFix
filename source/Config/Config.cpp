@@ -36,7 +36,11 @@ namespace
                    "enable_logging = true\n"
                    "\n"
                    "# 0 = Trace, 1 = Debug, 2 = Info, 3 = Warning, 4 = Error, 5 = Critical, 6 = Off\n"
-                   "log_level = 2\n";
+                   "log_level = 2\n"
+                   "\n"
+                   "[fixes]\n"
+                   "# Guard the known retail DX9 renderer cleanup crash.\n"
+                   "renderer_crash_guard = true\n";
         return content;
     }
 
@@ -167,6 +171,11 @@ namespace
             {
                 settings.debug.logLevel = static_cast<int>(*level);
             }
+        }
+
+        if (const auto enabled = table["fixes"]["renderer_crash_guard"].value<bool>())
+        {
+            settings.fixes.rendererCrashGuard = *enabled;
         }
     }
 } // namespace
