@@ -49,6 +49,12 @@ namespace AltairFix::Game
     /// @param renderer Renderer value to describe.
     /// @return Static string such as @c "Direct3D 9".
     [[nodiscard]] const char* GetRendererName(Renderer renderer);
+
+    /// @brief Returns the user-facing DirectX version label.
+    ///
+    /// @param renderer Renderer value to describe.
+    /// @return Static string such as @c "DirectX 9" or @c "Unknown".
+    [[nodiscard]] const char* GetDirectXVersionLabel(Renderer renderer);
 } // namespace AltairFix::Game
 
 #endif // ALTAIRFIX_GAME_EXECUTABLE_H

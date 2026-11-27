@@ -7,8 +7,8 @@
 /// 1. Load AltairFix.toml and detect the DX9 or DX10 executable.
 /// 2. Initialize file logging next to the ASI (see Logging/Logging.h).
 /// 3. Disable per-thread loader notifications, which the mod does not need.
-/// 4. Hand the welcome dialog and safetyhook installer to worker threads, so a
-///    modal MessageBox and thread suspension never run under the loader lock.
+/// 4. Hand the safetyhook and overlay installers to a worker thread, so thread
+///    suspension never runs under the loader lock.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -19,6 +19,7 @@
 #include "Game/RendererHook.h"
 #include "Logging/Logging.h"
 #include "Paths/Paths.h"
+#include "UI/Direct3D9Overlay.h"
 
 #include <spdlog/spdlog.h>
 #include <windows.h>
@@ -29,30 +30,11 @@ namespace
     /// DllMain releases the loader lock and reads this value.
     AltairFix::Game::Renderer g_detectedRenderer = AltairFix::Game::Renderer::Unknown;
 
-    /// @brief Worker-thread entry point that shows the placeholder welcome
-    ///        dialog.
-    ///
-    /// The dialog is modal, so it is deliberately kept out of DllMain. The log
-    /// record before MessageBoxW() proves that injection succeeded even if the
-    /// user leaves the dialog open or closes the game before dismissing it.
-    ///
-    /// @param unused Unused thread parameter required by the
-    ///               @c LPTHREAD_START_ROUTINE signature.
-    /// @return Always 0.
-    DWORD WINAPI ShowInjectedMessage(LPVOID /*unused*/)
-    {
-        spdlog::info("Displaying the placeholder welcome message.");
-        MessageBoxW(nullptr,
-                    L"AltairFix injected successfully!\n\nThis is the placeholder mod entry point.",
-                    L"AltairFix",
-                    MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST);
-        return 0;
-    }
-
-    /// @brief Worker-thread entry point that installs the renderer hook.
+    /// @brief Worker-thread entry point that installs the renderer hook and
+    ///        the in-game overlay.
     ///
     /// safetyhook suspends other threads while patching code. Running it from
-    /// DllMain would do that while the loader lock is held, so the hook is
+    /// DllMain would do that while the loader lock is held, so the hooks are
     /// installed from a dedicated thread after DllMain returns.
     ///
     /// @param unused Unused thread parameter required by the
@@ -61,6 +43,17 @@ namespace
     DWORD WINAPI InstallRendererHook(LPVOID /*unused*/)
     {
         AltairFix::Game::InstallRendererConfirmationHook(g_detectedRenderer);
+
+        if (g_detectedRenderer == AltairFix::Game::Renderer::Direct3D9)
+        {
+            AltairFix::UI::InstallDirect3D9Overlay(g_detectedRenderer);
+        }
+        else if (g_detectedRenderer == AltairFix::Game::Renderer::Direct3D10)
+        {
+            spdlog::info("The in-game UI is not implemented for Direct3D 10 yet.");
+        }
+
+        spdlog::info("Startup message box removed; the in-game overlay is the new entry point.");
         return 0;
     }
 } // namespace
@@ -68,7 +61,7 @@ namespace
 /// @brief DLL entry point invoked by Ultimate ASI Loader.
 ///
 /// On @c DLL_PROCESS_ATTACH the function loads @c AltairFix.toml, detects the
-/// renderer build, prepares logging, and starts the startup worker threads.
+/// renderer build, prepares logging, and starts the renderer worker thread.
 /// Other notifications are ignored except for @c DLL_PROCESS_DETACH, which
 /// flushes and closes the log.
 ///
@@ -114,6 +107,7 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
             spdlog::warn("{}", config.warning);
         }
         spdlog::info("Renderer: {} (detected from the executable import table).", AltairFix::Game::GetRendererName(renderer));
+        spdlog::info("DirectX version: {}.", AltairFix::Game::GetDirectXVersionLabel(renderer));
         if (renderer == AltairFix::Game::Renderer::Unknown)
         {
             spdlog::warn("Renderer could not be identified; version-specific features will stay disabled.");
@@ -134,16 +128,6 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
         {
             spdlog::error("Failed to create the renderer-hook thread (error {}).", GetLastError());
         }
-    }
-
-    HANDLE messageThread = CreateThread(nullptr, 0, ShowInjectedMessage, nullptr, 0, nullptr);
-    if (messageThread != nullptr)
-    {
-        CloseHandle(messageThread);
-    }
-    else if (loggingReady)
-    {
-        spdlog::error("Failed to create the welcome-message thread (error {}).", GetLastError());
     }
 
     return TRUE;

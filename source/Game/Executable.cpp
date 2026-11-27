@@ -163,4 +163,19 @@ namespace AltairFix::Game
 
         return "Unknown";
     }
+
+    const char* GetDirectXVersionLabel(Renderer renderer)
+    {
+        switch (renderer)
+        {
+        case Renderer::Direct3D9:
+            return "DirectX 9";
+        case Renderer::Direct3D10:
+            return "DirectX 10";
+        case Renderer::Unknown:
+            break;
+        }
+
+        return "Unknown";
+    }
 } // namespace AltairFix::Game

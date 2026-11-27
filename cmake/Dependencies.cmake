@@ -30,6 +30,12 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/zydis/CMakeLists.txt")
         "Fetch it with: git submodule update --init --recursive")
 endif()
 
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/imgui.h")
+    message(FATAL_ERROR
+        "The Dear ImGui submodule is missing.\n"
+        "Fetch it with: git submodule update --init --recursive")
+endif()
+
 # spdlog is the diagnostic logging backend. It is compiled as a static library
 # and linked into AltairFix.asi, keeping the mod a single-file deployment with
 # no extra runtime DLLs to install.
@@ -82,3 +88,21 @@ add_subdirectory(
     "${CMAKE_CURRENT_SOURCE_DIR}/external/safetyhook"
     "${CMAKE_CURRENT_BINARY_DIR}/external/safetyhook"
     EXCLUDE_FROM_ALL)
+
+# Dear ImGui is compiled into AltairFix. Only the Win32 platform backend and
+# the DX9 renderer backend are built; the mod has no DX10 overlay.
+add_library(imgui STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/imgui.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/imgui_draw.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/imgui_tables.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/imgui_widgets.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/backends/imgui_impl_win32.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/backends/imgui_impl_dx9.cpp")
+
+target_include_directories(imgui SYSTEM PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui"
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui/backends")
+
+# dwmapi is referenced by imgui_impl_win32's alpha-compositing helper even
+# when that helper is not called.
+target_link_libraries(imgui PUBLIC d3d9 d3dcompiler dwmapi)

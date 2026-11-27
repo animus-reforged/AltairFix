@@ -32,9 +32,14 @@ add_library(AltairFix SHARED
     source/Game/Executable.cpp
     source/Game/RendererHook.cpp
     source/Logging/Logging.cpp
-    source/Paths/Paths.cpp)
+    source/Paths/Paths.cpp
+    source/UI/Direct3D9Overlay.cpp
+    source/UI/Input.cpp
+    source/UI/Overlay.cpp
+    source/UI/Ui.cpp)
 target_include_directories(AltairFix PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/source")
 target_link_libraries(AltairFix PRIVATE
+    imgui
     safetyhook::safetyhook
     spdlog::spdlog
     tomlplusplus::tomlplusplus
