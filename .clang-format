@@ -1,7 +1,7 @@
 ---
 Language: Cpp
 BasedOnStyle: LLVM
-Standard: c++20
+Standard: c++23
 
 # Layout
 IndentWidth: 4

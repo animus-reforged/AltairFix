@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 4.4)
 project(AltairFix VERSION 1.0.0 LANGUAGES CXX)
 
+# Snapshot the configured version for the configuration and logging modules.
+set(ALTAIRFIX_VERSION "${PROJECT_VERSION}")
+
 if(NOT MINGW)
     message(FATAL_ERROR
         "AltairFix targets 32-bit MinGW-w64. Configure with the 'mingw32' preset "
@@ -13,7 +16,7 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
         "${CMAKE_SIZEOF_VOID_P}-byte pointers.")
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -26,17 +29,20 @@ include(cmake/Dependencies.cmake)
 add_library(AltairFix SHARED
     source/dllmain.cpp
     source/Config/Config.cpp
+    source/Game/Executable.cpp
+    source/Game/RendererHook.cpp
     source/Logging/Logging.cpp
     source/Paths/Paths.cpp)
 target_include_directories(AltairFix PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/source")
 target_link_libraries(AltairFix PRIVATE
+    safetyhook::safetyhook
     spdlog::spdlog
     tomlplusplus::tomlplusplus
     user32)
 
 # The configuration module records this value in a freshly created
 # AltairFix.toml and uses it in startup log records.
-target_compile_definitions(AltairFix PRIVATE ALTAIRFIX_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(AltairFix PRIVATE ALTAIRFIX_VERSION="${ALTAIRFIX_VERSION}")
 
 # Keep the ASI a single-file drop-in. Without static runtime linking, llvm-mingw
 # would make AltairFix.asi import libc++.dll and libunwind.dll, which the game

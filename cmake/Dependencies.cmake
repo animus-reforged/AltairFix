@@ -18,6 +18,18 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/tomlplusplus/CMakeLists.txt"
         "Fetch it with: git submodule update --init --recursive")
 endif()
 
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/safetyhook/CMakeLists.txt")
+    message(FATAL_ERROR
+        "The safetyhook submodule is missing.\n"
+        "Fetch it with: git submodule update --init --recursive")
+endif()
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/zydis/CMakeLists.txt")
+    message(FATAL_ERROR
+        "The Zydis submodule is missing.\n"
+        "Fetch it with: git submodule update --init --recursive")
+endif()
+
 # spdlog is the diagnostic logging backend. It is compiled as a static library
 # and linked into AltairFix.asi, keeping the mod a single-file deployment with
 # no extra runtime DLLs to install.
@@ -49,4 +61,24 @@ set(tomlplusplus_INCLUDES_WITH_SYSTEM ON CACHE BOOL "AltairFix: include toml++ a
 add_subdirectory(
     "${CMAKE_CURRENT_SOURCE_DIR}/external/tomlplusplus"
     "${CMAKE_CURRENT_BINARY_DIR}/external/tomlplusplus"
+    EXCLUDE_FROM_ALL)
+
+# safetyhook performs inline, mid-function, and vtable hooks. Its only runtime
+# dependency is Zydis, which lives in external/zydis. Point FetchContent at that
+# submodule so configuring never downloads sources from the network.
+set(ZYDIS_BUILD_EXAMPLES OFF CACHE BOOL "AltairFix: do not build Zydis examples" FORCE)
+set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "AltairFix: do not build Zydis tools" FORCE)
+set(ZYDIS_BUILD_TESTS OFF CACHE BOOL "AltairFix: do not build Zydis tests" FORCE)
+set(ZYDIS_BUILD_DOXYGEN OFF CACHE BOOL "AltairFix: do not build Zydis documentation" FORCE)
+set(ZYDIS_BUILD_MAN OFF CACHE BOOL "AltairFix: do not build Zydis man pages" FORCE)
+set(FETCHCONTENT_SOURCE_DIR_ZYDIS "${CMAKE_CURRENT_SOURCE_DIR}/external/zydis" CACHE PATH "AltairFix: use the Zydis submodule" FORCE)
+
+set(SAFETYHOOK_BUILD_DOCS OFF CACHE BOOL "AltairFix: do not build safetyhook documentation" FORCE)
+set(SAFETYHOOK_BUILD_TEST OFF CACHE BOOL "AltairFix: do not build safetyhook tests" FORCE)
+set(SAFETYHOOK_BUILD_EXAMPLES OFF CACHE BOOL "AltairFix: do not build safetyhook examples" FORCE)
+set(SAFETYHOOK_FETCH_ZYDIS ON CACHE BOOL "AltairFix: consume the local Zydis submodule" FORCE)
+
+add_subdirectory(
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/safetyhook"
+    "${CMAKE_CURRENT_BINARY_DIR}/external/safetyhook"
     EXCLUDE_FROM_ALL)
