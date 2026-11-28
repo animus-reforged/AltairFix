@@ -114,13 +114,18 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
     {
         const std::string configPath = config.path.empty() ? "<unresolved>" : AltairFix::Paths::ToUtf8(config.path.wstring());
         spdlog::info("[core] AltairFix {} attached t=+{}ms", config.settings.metadata.version, AltairFix::Logging::ElapsedMilliseconds());
-        spdlog::info("[config] path={} file_version={} defaults_created={} logging={} log_level={} renderer_crash_guard={}",
+        spdlog::info("[config] path={} file_version={} defaults_created={} missing_defaults_added={} logging={} log_level={} renderer_crash_guard={}",
                      configPath,
                      config.settings.metadata.version,
                      config.createdDefaultFile,
+                     config.addedMissingDefaults,
                      config.settings.debug.enableLogging,
                      config.settings.debug.logLevel,
                      config.settings.fixes.rendererCrashGuard);
+        if (config.addedMissingDefaults)
+        {
+            spdlog::info("[config] added missing default settings path={}", configPath);
+        }
         if (!config.warning.empty())
         {
             spdlog::warn("[config] warning={}", config.warning);

@@ -86,14 +86,18 @@ namespace AltairFix::Config
 
         /// True when the file did not exist and the defaults were written.
         bool createdDefaultFile = false;
+
+        /// True when missing known settings were added to an existing file.
+        bool addedMissingDefaults = false;
     };
 
     /// @brief Loads settings from @c AltairFix.toml next to the ASI.
     ///
     /// Creates the file with documented defaults when it does not exist. A
-    /// missing table or key keeps the corresponding default, so partial files
-    /// are valid. A parse or I/O failure leaves settings at their defaults and
-    /// fills @c LoadResult::warning.
+    /// missing table or key keeps the corresponding default and is written back
+    /// to an existing file, so partial files are upgraded while comments and
+    /// unknown settings are preserved. A parse or I/O failure leaves settings at
+    /// their defaults and fills @c LoadResult::warning.
     ///
     /// @param module ASI module used to locate the configuration file.
     /// @return Parsed settings, the resolved path, and any non-fatal warning.

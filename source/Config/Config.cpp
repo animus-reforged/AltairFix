@@ -2,12 +2,17 @@
 
 #include "Paths/Paths.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <toml++/toml.hpp>
+#include <utility>
+#include <vector>
 
 namespace
 {
@@ -119,6 +124,51 @@ namespace
         return true;
     }
 
+    /// @brief Replaces a configuration file through a temporary file.
+    ///
+    /// Writing beside the original and replacing it keeps a failed write from
+    /// truncating a working configuration.
+    ///
+    /// @param path Destination file.
+    /// @param content Complete UTF-8 file contents.
+    /// @param error Receives a diagnostic when the write fails.
+    /// @return @c true when the file was replaced.
+    [[nodiscard]] bool ReplaceFile(const std::filesystem::path& path, const std::string& content, std::string& error)
+    {
+        std::filesystem::path temporary = path;
+        temporary += L".tmp";
+
+        std::ofstream stream(temporary, std::ios::trunc | std::ios::binary);
+        if (!stream)
+        {
+            error = "Could not create the temporary AltairFix.toml.";
+            return false;
+        }
+
+        stream.write(content.data(), static_cast<std::streamsize>(content.size()));
+        stream.close();
+        if (!stream)
+        {
+            std::error_code ignored;
+            std::filesystem::remove(temporary, ignored);
+            error = "Could not write the temporary AltairFix.toml.";
+            return false;
+        }
+
+        if (MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0)
+        {
+            const DWORD code = GetLastError();
+            std::error_code ignored;
+            std::filesystem::remove(temporary, ignored);
+            error = "Could not replace AltairFix.toml (Windows error ";
+            error += std::to_string(code);
+            error += ").";
+            return false;
+        }
+
+        return true;
+    }
+
     /// @brief Sends a warning to the debugger immediately.
     ///
     /// Configuration is loaded before file logging exists, and logging can be
@@ -177,6 +227,360 @@ namespace
         {
             settings.fixes.rendererCrashGuard = *enabled;
         }
+    }
+
+    /// @brief Trims leading and trailing spaces and tabs from a line.
+    ///
+    /// @param line Line to trim.
+    /// @return Trimmed view into @p line.
+    [[nodiscard]] std::string_view TrimLine(std::string_view line)
+    {
+        while (!line.empty() && (line.front() == ' ' || line.front() == '\t'))
+        {
+            line.remove_prefix(1);
+        }
+        while (!line.empty() && (line.back() == ' ' || line.back() == '\t'))
+        {
+            line.remove_suffix(1);
+        }
+        return line;
+    }
+
+    /// @brief Returns whether a line starts a TOML table section.
+    ///
+    /// @param line Line to inspect.
+    /// @return @c true for @c [table] and @c [[array]] headers.
+    [[nodiscard]] bool IsTableHeader(std::string_view line)
+    {
+        line = TrimLine(line);
+        return line.starts_with('[');
+    }
+
+    /// @brief Returns whether a line declares the named table.
+    ///
+    /// @param line Line to inspect.
+    /// @param table Table name without brackets.
+    /// @return @c true when the line is the table's header.
+    [[nodiscard]] bool IsTableHeaderFor(std::string_view line, std::string_view table)
+    {
+        line = TrimLine(line);
+        if (!line.starts_with('['))
+        {
+            return false;
+        }
+
+        const std::string header = "[" + std::string(table) + "]";
+        if (!line.starts_with(header))
+        {
+            return false;
+        }
+
+        return line.size() == header.size() || line[header.size()] == ' ' || line[header.size()] == '\t' || line[header.size()] == '#';
+    }
+
+    /// @brief Returns whether a line is blank or a TOML comment.
+    ///
+    /// @param line Line to inspect.
+    /// @return @c true when the line has no setting content.
+    [[nodiscard]] bool IsBlankOrComment(std::string_view line)
+    {
+        line = TrimLine(line);
+        return line.empty() || line.starts_with('#');
+    }
+
+    /// A setting that can be materialized into an existing configuration file.
+    struct KnownSetting
+    {
+        /// Table that owns the key.
+        std::string_view table;
+
+        /// Key name within the table.
+        std::string_view key;
+
+        /// Comment written above the key when it is added.
+        std::string_view comment;
+
+        /// TOML literal for the default value.
+        std::string value;
+    };
+
+    /// Missing settings grouped by their owning table.
+    struct MissingGroup
+    {
+        /// Table that owns the keys.
+        std::string_view table;
+
+        /// Whether the parsed document already contains the table.
+        bool tableExists = false;
+
+        /// Settings missing from the table.
+        std::vector<const KnownSetting*> settings;
+    };
+
+    /// @brief Describes every setting known to this build and its default.
+    ///
+    /// Keep this list in sync with @c ApplyTable and @c BuildDefaultFileContent.
+    ///
+    /// @return Known settings in the order they should be written.
+    [[nodiscard]] std::vector<KnownSetting> BuildKnownSettings()
+    {
+        return {
+            {
+                .table = "metadata",
+                .key = "version",
+                .comment = "# Version of AltairFix that wrote this file.",
+                .value = std::string("\"") + ALTAIRFIX_VERSION + "\"",
+            },
+            {
+                .table = "debug",
+                .key = "enable_logging",
+                .comment = "# Write AltairFix.log next to the ASI.",
+                .value = AltairFix::Config::DEFAULT_ENABLE_LOGGING ? "true" : "false",
+            },
+            {
+                .table = "debug",
+                .key = "log_level",
+                .comment = "# 0 = Trace, 1 = Debug, 2 = Info, 3 = Warning, 4 = Error, 5 = Critical, 6 = Off",
+                .value = std::to_string(AltairFix::Config::DEFAULT_LOG_LEVEL),
+            },
+            {
+                .table = "fixes",
+                .key = "renderer_crash_guard",
+                .comment = "# Guard the known retail DX9 renderer cleanup crash.",
+                .value = AltairFix::Config::DEFAULT_RENDERER_CRASH_GUARD ? "true" : "false",
+            },
+        };
+    }
+
+    /// @brief Splits raw TOML text into lines without line endings.
+    ///
+    /// @param content Raw file text.
+    /// @return Lines in file order.
+    [[nodiscard]] std::vector<std::string> SplitLines(const std::string& content)
+    {
+        std::vector<std::string> lines;
+        std::size_t start = 0;
+        while (start <= content.size())
+        {
+            const std::size_t end = content.find('\n', start);
+            const std::size_t length = (end == std::string::npos ? content.size() : end) - start;
+            std::string line = content.substr(start, length);
+            if (!line.empty() && line.back() == '\r')
+            {
+                line.pop_back();
+            }
+            lines.push_back(std::move(line));
+            if (end == std::string::npos)
+            {
+                break;
+            }
+            start = end + 1;
+        }
+        return lines;
+    }
+
+    /// @brief Builds the comment and assignment lines for missing settings.
+    ///
+    /// @param settings Missing settings in write order.
+    /// @return Lines to insert.
+    [[nodiscard]] std::vector<std::string> BuildSettingBlock(const std::vector<const KnownSetting*>& settings)
+    {
+        std::vector<std::string> block;
+        for (std::size_t i = 0; i < settings.size(); ++i)
+        {
+            if (i > 0)
+            {
+                block.emplace_back();
+            }
+            block.emplace_back(settings[i]->comment);
+            block.emplace_back(std::string(settings[i]->key) + " = " + settings[i]->value);
+        }
+        return block;
+    }
+
+    /// @brief Appends a missing table with all of its settings.
+    ///
+    /// @param lines File lines to extend.
+    /// @param group Missing table and settings.
+    void AppendMissingTable(std::vector<std::string>& lines, const MissingGroup& group)
+    {
+        if (!lines.empty() && !TrimLine(lines.back()).empty())
+        {
+            lines.emplace_back();
+        }
+
+        lines.emplace_back("[" + std::string(group.table) + "]");
+        const std::vector<std::string> block = BuildSettingBlock(group.settings);
+        lines.insert(lines.end(), block.begin(), block.end());
+    }
+
+    /// @brief Finds the header line of an existing table.
+    ///
+    /// @param lines File lines to search.
+    /// @param table Table name without brackets.
+    /// @return Header index, or @c std::nullopt when absent.
+    [[nodiscard]] std::optional<std::size_t> FindTableHeader(const std::vector<std::string>& lines, std::string_view table)
+    {
+        for (std::size_t i = 0; i < lines.size(); ++i)
+        {
+            if (IsTableHeaderFor(lines[i], table))
+            {
+                return i;
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// @brief Finds the first line after a table section.
+    ///
+    /// @param lines File lines to search.
+    /// @param headerIndex Index of the table header.
+    /// @return Index of the next table header, or the line count.
+    [[nodiscard]] std::size_t FindSectionEnd(const std::vector<std::string>& lines, std::size_t headerIndex)
+    {
+        for (std::size_t i = headerIndex + 1; i < lines.size(); ++i)
+        {
+            if (IsTableHeader(lines[i]))
+            {
+                return i;
+            }
+        }
+        return lines.size();
+    }
+
+    /// @brief Finds where new keys should be inserted in a table section.
+    ///
+    /// @param lines File lines to search.
+    /// @param headerIndex Index of the table header.
+    /// @param sectionEnd Index of the next table header or the line count.
+    /// @return Insertion index after the last key line.
+    [[nodiscard]] std::size_t FindInsertionPoint(const std::vector<std::string>& lines, std::size_t headerIndex, std::size_t sectionEnd)
+    {
+        std::size_t insertAt = headerIndex + 1;
+        for (std::size_t i = headerIndex + 1; i < sectionEnd; ++i)
+        {
+            if (!IsBlankOrComment(lines[i]))
+            {
+                insertAt = i + 1;
+            }
+        }
+        return insertAt;
+    }
+
+    /// @brief Inserts missing keys into an existing table section.
+    ///
+    /// @param lines File lines to edit.
+    /// @param group Missing table and settings.
+    /// @return @c false when the table header was not found.
+    [[nodiscard]] bool InsertMissingTableKeys(std::vector<std::string>& lines, const MissingGroup& group)
+    {
+        const std::optional<std::size_t> headerIndex = FindTableHeader(lines, group.table);
+        if (!headerIndex)
+        {
+            return false;
+        }
+
+        const std::size_t sectionEnd = FindSectionEnd(lines, *headerIndex);
+        const std::size_t insertAt = FindInsertionPoint(lines, *headerIndex, sectionEnd);
+        std::vector<std::string> block = BuildSettingBlock(group.settings);
+        if (insertAt > 0 && !TrimLine(lines[insertAt - 1]).empty())
+        {
+            block.insert(block.begin(), "");
+        }
+        lines.insert(lines.begin() + static_cast<std::vector<std::string>::difference_type>(insertAt), block.begin(), block.end());
+        return true;
+    }
+
+    /// @brief Adds known settings missing from an existing configuration file.
+    ///
+    /// The raw file text is edited instead of being serialized from the parsed
+    /// table, so comments, unknown keys, and user formatting are preserved.
+    /// Missing keys are inserted at the end of their table section; missing
+    /// tables are appended.
+    ///
+    /// @param content Raw file text. Updated when settings are added.
+    /// @param document Parsed configuration document.
+    /// @param warning Receives a non-fatal problem when a table cannot be edited.
+    /// @return @c true when @p content changed.
+    [[nodiscard]] bool AddMissingDefaults(std::string& content, const toml::table& document, std::string& warning)
+    {
+        const std::vector<KnownSetting> knownSettings = BuildKnownSettings();
+
+        std::vector<MissingGroup> groups;
+        for (const KnownSetting& setting : knownSettings)
+        {
+            const auto tableNode = document[setting.table];
+            const bool tableExists = static_cast<bool>(tableNode);
+            const toml::table* table = tableNode.as_table();
+            if (tableExists && table == nullptr)
+            {
+                AppendWarning(warning, "Cannot add missing " + std::string(setting.table) + "." + std::string(setting.key) + ": it is not a TOML table.");
+                continue;
+            }
+
+            if (table != nullptr && table->contains(setting.key))
+            {
+                continue;
+            }
+
+            auto group = std::ranges::find_if(groups, [&setting](const MissingGroup& candidate) { return candidate.table == setting.table; });
+            if (group == groups.end())
+            {
+                groups.push_back({.table = setting.table, .tableExists = tableExists, .settings = {}});
+                group = groups.end() - 1;
+            }
+            group->settings.push_back(&setting);
+        }
+
+        if (groups.empty())
+        {
+            return false;
+        }
+
+        const bool crlf = content.contains("\r\n");
+        std::vector<std::string> lines = SplitLines(content);
+        if (std::ranges::all_of(lines, [](const std::string& line) { return TrimLine(line).empty(); }))
+        {
+            lines.clear();
+        }
+
+        bool changed = false;
+        for (const MissingGroup& group : groups)
+        {
+            if (!group.tableExists)
+            {
+                AppendMissingTable(lines, group);
+                changed = true;
+                continue;
+            }
+
+            if (!InsertMissingTableKeys(lines, group))
+            {
+                AppendWarning(warning, "Cannot add missing [" + std::string(group.table) + "] keys: its table header was not found.");
+                continue;
+            }
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return false;
+        }
+
+        while (!lines.empty() && TrimLine(lines.back()).empty())
+        {
+            lines.pop_back();
+        }
+
+        std::string updated;
+        const std::string newline = crlf ? "\r\n" : "\n";
+        for (const std::string& line : lines)
+        {
+            updated += line;
+            updated += newline;
+        }
+        content = std::move(updated);
+        return true;
     }
 } // namespace
 
@@ -247,6 +651,20 @@ namespace AltairFix::Config
             {
                 const toml::table table = toml::parse(content, Paths::ToUtf8(result.path.wstring()));
                 ApplyTable(table, result.settings, result.warning);
+
+                std::string updatedContent = content;
+                if (AddMissingDefaults(updatedContent, table, result.warning))
+                {
+                    std::string writeError;
+                    if (ReplaceFile(result.path, updatedContent, writeError))
+                    {
+                        result.addedMissingDefaults = true;
+                    }
+                    else
+                    {
+                        AppendWarning(result.warning, writeError);
+                    }
+                }
             }
             catch (const toml::parse_error& parseError)
             {
