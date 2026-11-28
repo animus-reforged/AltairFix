@@ -38,6 +38,18 @@ add_library(AltairFix SHARED
     source/UI/Input.cpp
     source/UI/Overlay.cpp
     source/UI/Ui.cpp)
+
+# Tiny detection shim for the Ubisoft/Epic DX selector. It is built separately
+# from the ASI and installed next to the game exe by tools/setup_dx9_shim.py.
+add_library(AltairFixD3D10Shim SHARED
+    source/Launcher/D3d10Shim.cpp)
+set_target_properties(AltairFixD3D10Shim PROPERTIES
+    PREFIX ""
+    SUFFIX ".dll"
+    OUTPUT_NAME "d3d10"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/shim"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/shim"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/shim")
 target_include_directories(AltairFix PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/source")
 target_link_libraries(AltairFix PRIVATE
     imgui

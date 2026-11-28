@@ -18,11 +18,14 @@ GOG/Steam and Ubisoft/Epic releases ship different executables. AltairFix detect
 | Ubisoft/Epic | `AssassinsCreed_Dx9.exe`  | `C85473CC4F2A5D1391A6D77BCEAF276E` | `B3FFF1737CF77BC3EF5BB0EDE6905B40C8F4E476` |
 | Ubisoft/Epic | `AssassinsCreed_Dx10.exe` | `86924B021DDEFDECD96EBEA48AA79701` | `D56A31195D34D9BAAA79B1A3EB445422A7031760` |
 
+Ubisoft/Epic launches through `AssassinsCreed_Game.exe`, a selector that picks DX10 whenever a D3D10 adapter is available. AltairFix builds a tiny `d3d10.dll` shim that makes that probe fail, so the selector starts `AssassinsCreed_Dx9.exe` instead. No game executable is patched. Install it with `python tools/setup_dx9_shim.py` (use `--remove` to uninstall).
+
 ## Features
 
 - **Renderer Detection** — Identifies DX9 or DX10 from the executable's import table.
 - **Renderer Reset Crash Guard** — Hooks two renderer cleanup checks and skips invalid resource pointers.
-- **High Core Count Fix** — Spoofs `GetSystemInfo` and `GetProcessAffinityMask` to report at most 31 cores.
+- **High Core Count Fix** - Spoofs `GetSystemInfo` and `GetProcessAffinityMask` to report at most 31 cores.
+- **DX9 Launch Fix** - Installs a D3D10 detection shim so the Ubisoft selector starts DX9.
 
 ## Configuration
 
@@ -95,6 +98,7 @@ In CLion, enable the **MinGW 32-bit Debug** CMake profile. The ASI is deployed t
 ```powershell
 python tools/format.py          # Format source/
 python tools/format.py --check  # Verify formatting without changing files
+python tools/setup_dx9_shim.py  # Install the DX9 launch shim (--remove to uninstall)
 python tools/generate_changelog.py <since-sha> --output release_notes.md
 ```
 

@@ -114,6 +114,7 @@ jobs:
           python -m compileall -q tools
           python tools/setup_clion.py --help
           python tools/setup_asi_loader.py --help
+          python tools/setup_dx9_shim.py --help
           python tools/format.py --help
           python tools/generate_changelog.py --help
 
@@ -173,6 +174,22 @@ jobs:
             throw "Ultimate ASI Loader was not installed"
           }
 
+      - name: Test DX9 shim installer
+        shell: pwsh
+        run: |
+          $gameDir = Join-Path $env:RUNNER_TEMP "dx9-shim-test"
+          New-Item -ItemType Directory -Force -Path $gameDir | Out-Null
+
+          python tools/setup_dx9_shim.py --game-dir $gameDir --shim "build/mingw32/shim/d3d10.dll"
+          if (-not (Test-Path (Join-Path $gameDir "d3d10.dll"))) {
+            throw "D3D10 detection shim was not installed"
+          }
+
+          python tools/setup_dx9_shim.py --game-dir $gameDir --remove
+          if (Test-Path (Join-Path $gameDir "d3d10.dll")) {
+            throw "D3D10 detection shim was not removed"
+          }
+
       - name: Test changelog generator
         shell: pwsh
         run: |
@@ -188,12 +205,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
           Copy-Item "output/scripts/AltairFix.asi" (Join-Path $scriptsDir "AltairFix.asi") -Force
           Copy-Item "README.md" (Join-Path $artifactDir "README.md") -Force
+          Copy-Item "build/mingw32/shim/d3d10.dll" (Join-Path $artifactDir "d3d10.dll") -Force
           Compress-Archive -Path "$artifactDir/*" -DestinationPath "output/AltairFix-artifact.zip" -Force
 
           $releaseDir = "output/release_package"
           New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
           Copy-Item "output/scripts/AltairFix.asi" (Join-Path $releaseDir "AltairFix.asi") -Force
           Copy-Item "README.md" (Join-Path $releaseDir "README.md") -Force
+          Copy-Item "build/mingw32/shim/d3d10.dll" (Join-Path $releaseDir "d3d10.dll") -Force
           Compress-Archive -Path "$releaseDir/*" -DestinationPath "output/AltairFix.zip" -Force
 
           Get-ChildItem $artifactDir, $releaseDir -Recurse | Select-Object FullName
@@ -203,6 +222,13 @@ jobs:
         with:
           name: AltairFix-${{ inputs.is_stable && 'stable' || 'nightly' }}
           path: output/scripts/AltairFix.asi
+          if-no-files-found: error
+
+      - name: Upload raw DX9 shim
+        uses: actions/upload-artifact@v7
+        with:
+          name: AltairFix-${{ inputs.is_stable && 'stable' || 'nightly' }}-dx9-shim
+          path: build/mingw32/shim/d3d10.dll
           if-no-files-found: error
 
       - name: Upload packaged artifact

@@ -25,6 +25,8 @@ on:
       - ".gitmodules"
       - "CMakeLists.txt"
       - "CMakePresets.json"
+      - "tools/**"
+      - ".github/**"
   pull_request:
     paths:
       - "source/**"
@@ -33,6 +35,8 @@ on:
       - ".gitmodules"
       - "CMakeLists.txt"
       - "CMakePresets.json"
+      - "tools/**"
+      - ".github/**"
 
 permissions:
   contents: write
