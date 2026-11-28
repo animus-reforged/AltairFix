@@ -20,7 +20,9 @@
 
 #include <windows.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 namespace AltairFix::Logging
@@ -68,6 +70,16 @@ namespace AltairFix::Logging
     /// @param error Error code from GetLastError or a Win32 API.
     /// @return Human-readable error text, never empty.
     [[nodiscard]] std::string Win32ErrorMessage(DWORD error);
+
+    /// @brief Returns the active log file path, or an empty path when inactive.
+    [[nodiscard]] std::filesystem::path GetLogPath();
+
+    /// @brief Reads the most recent lines of the log file.
+    ///
+    /// @param maxLines Maximum number of lines to return.
+    /// @return The last @p maxLines lines joined with newlines, or a short
+    ///         diagnostic string when the file is unavailable.
+    [[nodiscard]] std::string ReadLogTail(std::size_t maxLines);
 
     /// @brief Flushes pending records and releases the log file.
     ///

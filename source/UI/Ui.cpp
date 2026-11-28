@@ -4,11 +4,13 @@
 #include "Game/CpuCoreLimit.h"
 #include "Game/RendererHook.h"
 #include "Logging/Logging.h"
+#include "Paths/Paths.h"
 
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
 #include <cstdint>
+#include <string>
 
 namespace AltairFix::UI
 {
@@ -77,6 +79,34 @@ namespace AltairFix::UI
                 ImGui::TextDisabled("Changes apply now and are saved to AltairFix.toml.");
                 ImGui::EndTabItem();
             }
+
+#ifndef NDEBUG
+            if (ImGui::BeginTabItem("Log"))
+            {
+                static std::string logText = "Press Refresh to load the log.\n";
+                static bool autoRefresh = true;
+                static double lastRefresh = 0.0;
+                const double now = ImGui::GetTime();
+                if (ImGui::Button("Refresh") || (autoRefresh && now - lastRefresh >= 1.0))
+                {
+                    logText = AltairFix::Logging::ReadLogTail(200);
+                    lastRefresh = now;
+                }
+                ImGui::SameLine();
+                ImGui::Checkbox("Auto-refresh", &autoRefresh);
+
+                const auto logPath = AltairFix::Logging::GetLogPath();
+                ImGui::TextDisabled("Log: %s", AltairFix::Paths::ToUtf8(logPath.wstring()).c_str());
+                ImGui::BeginChild("LogView", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+                ImGui::TextUnformatted(logText.c_str());
+                if (autoRefresh)
+                {
+                    ImGui::SetScrollY(ImGui::GetScrollMaxY());
+                }
+                ImGui::EndChild();
+                ImGui::EndTabItem();
+            }
+#endif
 
             ImGui::EndTabBar();
         }

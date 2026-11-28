@@ -6,13 +6,17 @@
 #include <spdlog/spdlog.h>
 #include <winternl.h>
 
+#include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -30,6 +34,9 @@ namespace
 
     /// Time source origin for ElapsedMilliseconds().
     std::int64_t g_startedAtMs = 0;
+
+    /// Path of the log file created by the last successful Initialize().
+    std::filesystem::path g_logPath;
 
     /// @brief Returns the current steady-clock time in milliseconds.
     std::int64_t NowMilliseconds()
@@ -135,6 +142,7 @@ namespace AltairFix::Logging
             spdlog::set_default_logger(std::move(logger));
 
             g_startedAtMs = NowMilliseconds();
+            g_logPath = logPath;
 
             spdlog::info("[core] logging initialized level={} spdlog={}.{}.{}",
                          spdlog::level::to_string_view(level),
@@ -183,6 +191,103 @@ namespace AltairFix::Logging
         const std::error_code code(static_cast<int>(error), std::system_category());
         const std::string message = code.message();
         return message.empty() ? "unknown error" : message;
+    }
+
+    std::filesystem::path GetLogPath()
+    {
+        return g_logPath;
+    }
+
+    std::string ReadLogTail(std::size_t maxLines)
+    {
+        if (g_logPath.empty())
+        {
+            return "Logging is not active.\n";
+        }
+
+        HANDLE file = CreateFileW(g_logPath.c_str(),
+                                  GENERIC_READ,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                  nullptr,
+                                  OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL,
+                                  nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+        {
+            return "Could not open the log file (Windows error " + std::to_string(GetLastError()) + ").\n";
+        }
+
+        LARGE_INTEGER size{};
+        if (GetFileSizeEx(file, &size) == 0 || size.QuadPart < 0)
+        {
+            CloseHandle(file);
+            return "Could not determine the log file size.\n";
+        }
+
+        constexpr LONGLONG MAX_BYTES = 512LL * 1024;
+        const bool truncated = size.QuadPart > MAX_BYTES;
+        const LONGLONG bytes = truncated ? MAX_BYTES : size.QuadPart;
+        if (bytes == 0)
+        {
+            CloseHandle(file);
+            return "The log file is empty.\n";
+        }
+
+        LARGE_INTEGER offset{};
+        offset.QuadPart = truncated ? size.QuadPart - MAX_BYTES : 0;
+        if (SetFilePointerEx(file, offset, nullptr, FILE_BEGIN) == 0)
+        {
+            CloseHandle(file);
+            return "Could not seek in the log file.\n";
+        }
+
+        std::string content(static_cast<std::size_t>(bytes), '\0');
+        std::size_t totalRead = 0;
+        while (totalRead < content.size())
+        {
+            DWORD read = 0;
+            const auto remaining = static_cast<DWORD>(content.size() - totalRead);
+            if (ReadFile(file, content.data() + totalRead, remaining, &read, nullptr) == 0 || read == 0)
+            {
+                break;
+            }
+            totalRead += read;
+        }
+        CloseHandle(file);
+        content.resize(totalRead);
+
+        std::vector<std::string_view> lines;
+        std::size_t start = 0;
+        while (start <= content.size())
+        {
+            const std::size_t end = content.find('\n', start);
+            const std::size_t length = (end == std::string::npos ? content.size() : end) - start;
+            std::string_view line(content.data() + start, length);
+            if (!line.empty() && line.back() == '\r')
+            {
+                line.remove_suffix(1);
+            }
+            lines.push_back(line);
+            if (end == std::string::npos)
+            {
+                break;
+            }
+            start = end + 1;
+        }
+
+        if (truncated && !lines.empty())
+        {
+            lines.erase(lines.begin()); // Partial first line from the tail window.
+        }
+
+        const std::size_t first = lines.size() > maxLines ? lines.size() - maxLines : 0;
+        std::string result;
+        for (std::size_t i = first; i < lines.size(); ++i)
+        {
+            result += lines[i];
+            result += '\n';
+        }
+        return result;
     }
 
     void Shutdown()
