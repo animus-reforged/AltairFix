@@ -17,6 +17,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 #ifndef ALTAIRFIX_VERSION
 #define ALTAIRFIX_VERSION "0.0.0"
@@ -108,6 +109,17 @@ namespace AltairFix::Config
     /// @param module ASI module used to locate the configuration file.
     /// @return Parsed settings, the resolved path, and any non-fatal warning.
     [[nodiscard]] LoadResult Load(HMODULE module);
+
+    /// @brief Sets a boolean setting in the configuration file beside the ASI.
+    ///
+    /// The file is edited in place; other settings and comments are preserved.
+    /// Missing tables or keys are added with the given value.
+    ///
+    /// @param table Table name without brackets.
+    /// @param key Key name within the table.
+    /// @param value New value to write.
+    /// @return @c true when the file was updated successfully.
+    [[nodiscard]] bool SetBool(std::string_view table, std::string_view key, bool value);
 } // namespace AltairFix::Config
 
 #endif // ALTAIRFIX_CONFIG_CONFIG_H

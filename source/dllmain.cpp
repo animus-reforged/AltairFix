@@ -31,9 +31,6 @@ namespace
     /// DllMain releases the loader lock and reads this value.
     AltairFix::Game::Renderer g_detectedRenderer = AltairFix::Game::Renderer::Unknown;
 
-    /// Whether the renderer cleanup crash guard is enabled by configuration.
-    bool g_rendererCrashGuardEnabled = true;
-
     /// @brief Worker-thread entry point that installs the renderer hook and
     ///        the in-game overlay.
     ///
@@ -51,14 +48,8 @@ namespace
         AltairFix::Game::LogCpuCoreLimitStatus();
         AltairFix::Game::InstallRendererConfirmationHook(g_detectedRenderer);
 
-        if (g_rendererCrashGuardEnabled)
-        {
-            AltairFix::Game::InstallRendererDisplayCleanupGuard(g_detectedRenderer);
-        }
-        else
-        {
-            spdlog::info("[renderer] display cleanup guard disabled by configuration");
-        }
+        AltairFix::Game::InstallRendererDisplayCleanupGuard(g_detectedRenderer);
+        spdlog::info("[renderer] display cleanup guard enabled={}", AltairFix::Game::IsRendererCrashGuardEnabled());
 
         if (g_detectedRenderer == AltairFix::Game::Renderer::Direct3D9)
         {
@@ -107,7 +98,7 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
     const AltairFix::Config::LoadResult config = AltairFix::Config::Load(module);
     const AltairFix::Logging::Options loggingOptions{.enabled = config.settings.debug.enableLogging, .verbosity = config.settings.debug.logLevel};
     const AltairFix::Game::Renderer renderer = AltairFix::Game::DetectRenderer(GetModuleHandleW(nullptr));
-    g_rendererCrashGuardEnabled = config.settings.fixes.rendererCrashGuard;
+    AltairFix::Game::SetRendererCrashGuardEnabled(config.settings.fixes.rendererCrashGuard);
     AltairFix::Game::InstallCpuCoreLimit(config.settings.fixes.cpuCoreLimit);
 
     // Open the log before any other work so early failures and the exact ASI

@@ -2,6 +2,7 @@
 
 #include "Config/Config.h"
 #include "Game/CpuCoreLimit.h"
+#include "Game/RendererHook.h"
 #include "Logging/Logging.h"
 
 #include <imgui.h>
@@ -35,22 +36,50 @@ namespace AltairFix::UI
             return;
         }
 
-        ImGui::Text("DirectX version: %s", Game::GetDirectXVersionLabel(renderer));
-        ImGui::Text("Detected from: executable import table");
-        ImGui::Text("Runtime: Direct3D 9 device active");
-        ImGui::Separator();
-        ImGui::Text("AltairFix %s", ALTAIRFIX_VERSION);
-        ImGui::Text("CPU cores: %u (game sees %u)",
-                    static_cast<unsigned int>(Game::GetActualProcessorCount()),
-                    static_cast<unsigned int>(Game::GetEffectiveProcessorCount()));
-        bool limitCores = Game::IsCpuCoreLimitEnabled();
-        if (ImGui::Checkbox("Limit CPU cores to 31", &limitCores))
+        if (ImGui::BeginTabBar("AltairFixTabs"))
         {
-            Game::SetCpuCoreLimitEnabled(limitCores);
-            spdlog::info("[cpu] core limit toggled enabled={} t=+{}ms", limitCores, AltairFix::Logging::ElapsedMilliseconds());
+            if (ImGui::BeginTabItem("General"))
+            {
+                ImGui::Text("DirectX version: %s", Game::GetDirectXVersionLabel(renderer));
+                ImGui::Text("Detected from: executable import table");
+                ImGui::Text("Runtime: Direct3D 9 device active");
+                ImGui::Separator();
+                ImGui::Text("AltairFix %s", ALTAIRFIX_VERSION);
+                ImGui::TextDisabled("Insert toggles this window.");
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Fixes"))
+            {
+                ImGui::Text("CPU cores: %u (game sees %u)",
+                            static_cast<unsigned int>(Game::GetActualProcessorCount()),
+                            static_cast<unsigned int>(Game::GetEffectiveProcessorCount()));
+                bool limitCores = Game::IsCpuCoreLimitEnabled();
+                if (ImGui::Checkbox("Limit CPU cores to 31", &limitCores))
+                {
+                    Game::SetCpuCoreLimitEnabled(limitCores);
+                    const bool saved = AltairFix::Config::SetBool("fixes", "cpu_core_limit", limitCores);
+                    spdlog::info("[cpu] core limit toggled enabled={} saved={} t=+{}ms", limitCores, saved, AltairFix::Logging::ElapsedMilliseconds());
+                }
+                ImGui::TextDisabled("Must be enabled before launch for the startup check.");
+
+                ImGui::Separator();
+                bool rendererGuard = Game::IsRendererCrashGuardEnabled();
+                if (ImGui::Checkbox("Guard renderer cleanup crash", &rendererGuard))
+                {
+                    Game::SetRendererCrashGuardEnabled(rendererGuard);
+                    const bool saved = AltairFix::Config::SetBool("fixes", "renderer_crash_guard", rendererGuard);
+                    spdlog::info("[renderer] cleanup guard toggled enabled={} saved={} t=+{}ms",
+                                 rendererGuard,
+                                 saved,
+                                 AltairFix::Logging::ElapsedMilliseconds());
+                }
+                ImGui::TextDisabled("Changes apply now and are saved to AltairFix.toml.");
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
         }
-        ImGui::TextDisabled("Set fixes.cpu_core_limit for the next launch.");
-        ImGui::TextDisabled("Insert toggles this window.");
         ImGui::End();
     }
 

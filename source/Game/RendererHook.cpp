@@ -72,6 +72,9 @@ namespace
     /// Ensures the count guard's first trigger is logged at warning level.
     std::atomic_bool g_displayCleanupCountGuardReported = false;
 
+    /// Whether the display cleanup guards currently alter game behaviour.
+    std::atomic_bool g_rendererGuardEnabled = true;
+
     /// @brief Logs the first renderer device creation.
     ///
     /// @param rendererName Renderer name used in the log record.
@@ -93,6 +96,11 @@ namespace
     // NOLINTNEXTLINE(misc-const-correctness) - safetyhook passes a mutable Context.
     void OnDisplayCleanupStore(safetyhook::Context& ctx)
     {
+        if (!g_rendererGuardEnabled.load(std::memory_order_relaxed))
+        {
+            return;
+        }
+
         constexpr std::uintptr_t kMinimumUserPointer = 0x10000;
         if (ctx.edx >= kMinimumUserPointer)
         {
@@ -128,6 +136,11 @@ namespace
     // NOLINTNEXTLINE(misc-const-correctness) - safetyhook passes a mutable Context.
     void OnDisplayCleanupCount(safetyhook::Context& ctx)
     {
+        if (!g_rendererGuardEnabled.load(std::memory_order_relaxed))
+        {
+            return;
+        }
+
         if (ctx.ebx == 0)
         {
             return;
@@ -382,5 +395,15 @@ namespace AltairFix::Game
                     &g_displayCleanupCountGuard,
                     "display cleanup count guard");
         }
+    }
+
+    bool IsRendererCrashGuardEnabled()
+    {
+        return g_rendererGuardEnabled.load(std::memory_order_relaxed);
+    }
+
+    void SetRendererCrashGuardEnabled(bool enabled)
+    {
+        g_rendererGuardEnabled.store(enabled, std::memory_order_relaxed);
     }
 } // namespace AltairFix::Game

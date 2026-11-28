@@ -45,6 +45,12 @@ namespace AltairFix::Game
     /// @note Call this after @c DLL_PROCESS_ATTACH has returned for the same
     ///       loader-lock reasons as @c InstallRendererConfirmationHook.
     void InstallRendererDisplayCleanupGuard(Renderer renderer);
+
+    /// @brief Returns whether the display cleanup guards are active.
+    [[nodiscard]] bool IsRendererCrashGuardEnabled();
+
+    /// @brief Enables or disables the display cleanup guards at runtime.
+    void SetRendererCrashGuardEnabled(bool enabled);
 } // namespace AltairFix::Game
 
 #endif // ALTAIRFIX_GAME_RENDERERHOOK_H

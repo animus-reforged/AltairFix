@@ -19,6 +19,9 @@ namespace
     /// Configuration file placed beside the ASI.
     constexpr const wchar_t* CONFIG_FILE_NAME = L"AltairFix.toml";
 
+    /// Path resolved by @c Load, used by @c SetBool.
+    std::filesystem::path g_configPath;
+
     /// @brief Builds the contents written when @c AltairFix.toml is missing.
     ///
     /// The file is deliberately self-describing: every key carries its valid
@@ -596,6 +599,44 @@ namespace
         content = std::move(updated);
         return true;
     }
+    /// @brief Replaces or appends a boolean key inside an existing table.
+    ///
+    /// @param lines File lines to edit.
+    /// @param headerIndex Index of the table header.
+    /// @param key Key to update.
+    /// @param assignment Complete assignment line to write.
+    void SetBoolInTable(std::vector<std::string>& lines, std::size_t headerIndex, std::string_view key, const std::string& assignment)
+    {
+        const std::size_t sectionEnd = FindSectionEnd(lines, headerIndex);
+        for (std::size_t i = headerIndex + 1; i < sectionEnd; ++i)
+        {
+            const std::string_view line = TrimLine(lines[i]);
+            const std::size_t equals = line.find('=');
+            if (equals == std::string_view::npos || TrimLine(line.substr(0, equals)) != key)
+            {
+                continue;
+            }
+
+            lines[i] = assignment;
+            return;
+        }
+
+        std::size_t insertAt = headerIndex + 1;
+        for (std::size_t i = headerIndex + 1; i < sectionEnd; ++i)
+        {
+            if (!IsBlankOrComment(lines[i]))
+            {
+                insertAt = i + 1;
+            }
+        }
+
+        if (insertAt > 0 && !TrimLine(lines[insertAt - 1]).empty())
+        {
+            lines.insert(lines.begin() + static_cast<std::vector<std::string>::difference_type>(insertAt), "");
+            ++insertAt;
+        }
+        lines.insert(lines.begin() + static_cast<std::vector<std::string>::difference_type>(insertAt), assignment);
+    }
 } // namespace
 
 namespace AltairFix::Config
@@ -604,6 +645,7 @@ namespace AltairFix::Config
     {
         LoadResult result;
         result.path = Paths::GetFileNextToModule(module, CONFIG_FILE_NAME);
+        g_configPath = result.path;
 
         if (result.path.empty())
         {
@@ -696,5 +738,57 @@ namespace AltairFix::Config
 
         ReportWarning(result.warning);
         return result;
+    }
+
+    bool SetBool(std::string_view table, std::string_view key, bool value)
+    {
+        if (g_configPath.empty())
+        {
+            return false;
+        }
+
+        std::string content;
+        std::string error;
+        if (!ReadUtf8File(g_configPath, content, error))
+        {
+            return false;
+        }
+
+        try
+        {
+            (void)toml::parse(content, Paths::ToUtf8(g_configPath.wstring()));
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+
+        const bool crlf = content.contains("\r\n");
+        std::vector<std::string> lines = SplitLines(content);
+        const std::string assignment = std::string(key) + " = " + (value ? "true" : "false");
+
+        const std::optional<std::size_t> headerIndex = FindTableHeader(lines, table);
+        if (!headerIndex)
+        {
+            if (!lines.empty() && !TrimLine(lines.back()).empty())
+            {
+                lines.emplace_back();
+            }
+            lines.emplace_back("[" + std::string(table) + "]");
+            lines.emplace_back(assignment);
+        }
+        else
+        {
+            SetBoolInTable(lines, *headerIndex, key, assignment);
+        }
+
+        std::string updated;
+        const std::string newline = crlf ? "\r\n" : "\n";
+        for (const std::string& line : lines)
+        {
+            updated += line;
+            updated += newline;
+        }
+        return ReplaceFile(g_configPath, updated, error);
     }
 } // namespace AltairFix::Config
