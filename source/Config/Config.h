@@ -39,6 +39,9 @@ namespace AltairFix::Config
     /// Default state for @c fixes.renderer_crash_guard.
     constexpr bool DEFAULT_RENDERER_CRASH_GUARD = true;
 
+    /// Default state for @c fixes.cpu_core_limit.
+    constexpr bool DEFAULT_CPU_CORE_LIMIT = true;
+
     /// Contents of the @c [metadata] table.
     struct Metadata
     {
@@ -61,6 +64,9 @@ namespace AltairFix::Config
     {
         /// Whether to guard the known DX9 renderer cleanup crash.
         bool rendererCrashGuard = DEFAULT_RENDERER_CRASH_GUARD;
+
+        /// Whether to report at most 31 CPU cores to the game.
+        bool cpuCoreLimit = DEFAULT_CPU_CORE_LIMIT;
     };
 
     /// All settings exposed by @c AltairFix.toml.

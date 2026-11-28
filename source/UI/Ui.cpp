@@ -1,8 +1,11 @@
 #include "UI/Ui.h"
 
 #include "Config/Config.h"
+#include "Game/CpuCoreLimit.h"
+#include "Logging/Logging.h"
 
 #include <imgui.h>
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 
@@ -37,6 +40,16 @@ namespace AltairFix::UI
         ImGui::Text("Runtime: Direct3D 9 device active");
         ImGui::Separator();
         ImGui::Text("AltairFix %s", ALTAIRFIX_VERSION);
+        ImGui::Text("CPU cores: %u (game sees %u)",
+                    static_cast<unsigned int>(Game::GetActualProcessorCount()),
+                    static_cast<unsigned int>(Game::GetEffectiveProcessorCount()));
+        bool limitCores = Game::IsCpuCoreLimitEnabled();
+        if (ImGui::Checkbox("Limit CPU cores to 31", &limitCores))
+        {
+            Game::SetCpuCoreLimitEnabled(limitCores);
+            spdlog::info("[cpu] core limit toggled enabled={} t=+{}ms", limitCores, AltairFix::Logging::ElapsedMilliseconds());
+        }
+        ImGui::TextDisabled("Set fixes.cpu_core_limit for the next launch.");
         ImGui::TextDisabled("Insert toggles this window.");
         ImGui::End();
     }

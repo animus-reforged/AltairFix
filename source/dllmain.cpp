@@ -15,6 +15,7 @@
 #endif
 
 #include "Config/Config.h"
+#include "Game/CpuCoreLimit.h"
 #include "Game/Executable.h"
 #include "Game/RendererHook.h"
 #include "Logging/Logging.h"
@@ -47,6 +48,7 @@ namespace
     {
         spdlog::info("[core] hook worker started t=+{}ms", AltairFix::Logging::ElapsedMilliseconds());
 
+        AltairFix::Game::LogCpuCoreLimitStatus();
         AltairFix::Game::InstallRendererConfirmationHook(g_detectedRenderer);
 
         if (g_rendererCrashGuardEnabled)
@@ -106,6 +108,7 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
     const AltairFix::Logging::Options loggingOptions{.enabled = config.settings.debug.enableLogging, .verbosity = config.settings.debug.logLevel};
     const AltairFix::Game::Renderer renderer = AltairFix::Game::DetectRenderer(GetModuleHandleW(nullptr));
     g_rendererCrashGuardEnabled = config.settings.fixes.rendererCrashGuard;
+    AltairFix::Game::InstallCpuCoreLimit(config.settings.fixes.cpuCoreLimit);
 
     // Open the log before any other work so early failures and the exact ASI
     // location are captured for support reports.
@@ -114,14 +117,16 @@ extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved
     {
         const std::string configPath = config.path.empty() ? "<unresolved>" : AltairFix::Paths::ToUtf8(config.path.wstring());
         spdlog::info("[core] AltairFix {} attached t=+{}ms", config.settings.metadata.version, AltairFix::Logging::ElapsedMilliseconds());
-        spdlog::info("[config] path={} file_version={} defaults_created={} missing_defaults_added={} logging={} log_level={} renderer_crash_guard={}",
-                     configPath,
-                     config.settings.metadata.version,
-                     config.createdDefaultFile,
-                     config.addedMissingDefaults,
-                     config.settings.debug.enableLogging,
-                     config.settings.debug.logLevel,
-                     config.settings.fixes.rendererCrashGuard);
+        spdlog::info(
+            "[config] path={} file_version={} defaults_created={} missing_defaults_added={} logging={} log_level={} renderer_crash_guard={} cpu_core_limit={}",
+            configPath,
+            config.settings.metadata.version,
+            config.createdDefaultFile,
+            config.addedMissingDefaults,
+            config.settings.debug.enableLogging,
+            config.settings.debug.logLevel,
+            config.settings.fixes.rendererCrashGuard,
+            config.settings.fixes.cpuCoreLimit);
         if (config.addedMissingDefaults)
         {
             spdlog::info("[config] added missing default settings path={}", configPath);

@@ -45,7 +45,10 @@ namespace
                    "\n"
                    "[fixes]\n"
                    "# Guard the known retail DX9 renderer cleanup crash.\n"
-                   "renderer_crash_guard = true\n";
+                   "renderer_crash_guard = true\n"
+                   "\n"
+                   "# Report at most 31 CPU cores to the game (32-core startup fix).\n"
+                   "cpu_core_limit = true\n";
         return content;
     }
 
@@ -227,6 +230,11 @@ namespace
         {
             settings.fixes.rendererCrashGuard = *enabled;
         }
+
+        if (const auto enabled = table["fixes"]["cpu_core_limit"].value<bool>())
+        {
+            settings.fixes.cpuCoreLimit = *enabled;
+        }
     }
 
     /// @brief Trims leading and trailing spaces and tabs from a line.
@@ -348,6 +356,12 @@ namespace
                 .key = "renderer_crash_guard",
                 .comment = "# Guard the known retail DX9 renderer cleanup crash.",
                 .value = AltairFix::Config::DEFAULT_RENDERER_CRASH_GUARD ? "true" : "false",
+            },
+            {
+                .table = "fixes",
+                .key = "cpu_core_limit",
+                .comment = "# Report at most 31 CPU cores to the game (32-core startup fix).",
+                .value = AltairFix::Config::DEFAULT_CPU_CORE_LIMIT ? "true" : "false",
             },
         };
     }

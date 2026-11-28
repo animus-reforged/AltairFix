@@ -29,6 +29,7 @@ include(cmake/Dependencies.cmake)
 add_library(AltairFix SHARED
     source/dllmain.cpp
     source/Config/Config.cpp
+    source/Game/CpuCoreLimit.cpp
     source/Game/Executable.cpp
     source/Game/RendererHook.cpp
     source/Logging/Logging.cpp
